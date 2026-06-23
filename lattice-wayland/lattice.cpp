@@ -43,6 +43,7 @@
 #include <EGL/egl.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
+#include <GL/glext.h>
 
 #include "xdg-shell-client-protocol.h"
 #include "xdg-decoration-client-protocol.h"
@@ -186,6 +187,9 @@ struct GVertex {           /* 48 bytes, matches glVertexPointer offsets below */
 #ifndef GL_STATIC_DRAW
 #define GL_STATIC_DRAW   0x88B4
 #endif
+#ifndef GL_DYNAMIC_DRAW
+#define GL_DYNAMIC_DRAW  0x88B8
+#endif
 
 typedef void (*PFN_GenBuffers_t)   (GLsizei, GLuint *);
 typedef void (*PFN_BindBuffer_t)   (GLenum, GLuint);
@@ -202,6 +206,68 @@ static void load_vbo_fns() {
     fn_BindBuffer    = (PFN_BindBuffer_t)   eglGetProcAddress("glBindBuffer");
     fn_BufferData    = (PFN_BufferData_t)   eglGetProcAddress("glBufferData");
     fn_DeleteBuffers = (PFN_DeleteBuffers_t)eglGetProcAddress("glDeleteBuffers");
+}
+
+/* Shader + instancing function pointers (GL 2.0 / GL_ARB_instanced_arrays) */
+static PFNGLCREATESHADERPROC              fn_CreateShader          = nullptr;
+static PFNGLSHADERSOURCEPROC              fn_ShaderSource          = nullptr;
+static PFNGLCOMPILESHADERPROC             fn_CompileShader         = nullptr;
+static PFNGLGETSHADERIVPROC               fn_GetShaderiv           = nullptr;
+static PFNGLGETSHADERINFOLOGPROC          fn_GetShaderInfoLog      = nullptr;
+static PFNGLCREATEPROGRAMPROC             fn_CreateProgram         = nullptr;
+static PFNGLATTACHSHADERPROC              fn_AttachShader          = nullptr;
+static PFNGLBINDATTRIBLOCATIONPROC        fn_BindAttribLocation    = nullptr;
+static PFNGLLINKPROGRAMPROC               fn_LinkProgram           = nullptr;
+static PFNGLGETPROGRAMIVPROC              fn_GetProgramiv          = nullptr;
+static PFNGLGETPROGRAMINFOLOGPROC         fn_GetProgramInfoLog     = nullptr;
+static PFNGLUSEPROGRAMPROC                fn_UseProgram            = nullptr;
+static PFNGLGETUNIFORMLOCATIONPROC        fn_GetUniformLocation    = nullptr;
+static PFNGLUNIFORM1IPROC                 fn_Uniform1i             = nullptr;
+static PFNGLUNIFORM1FPROC                 fn_Uniform1f             = nullptr;
+static PFNGLUNIFORM3FVPROC                fn_Uniform3fv            = nullptr;
+static PFNGLUNIFORMMATRIX4FVPROC          fn_UniformMatrix4fv      = nullptr;
+static PFNGLENABLEVERTEXATTRIBARRAYPROC   fn_EnableVertexAttribArray  = nullptr;
+static PFNGLDISABLEVERTEXATTRIBARRAYPROC  fn_DisableVertexAttribArray = nullptr;
+static PFNGLVERTEXATTRIBPOINTERPROC       fn_VertexAttribPointer   = nullptr;
+static PFNGLVERTEXATTRIBDIVISORPROC       fn_VertexAttribDivisor   = nullptr;
+static PFNGLDRAWARRAYSINSTANCEDPROC       fn_DrawArraysInstanced   = nullptr;
+static PFNGLDELETESHADERPROC              fn_DeleteShader          = nullptr;
+static PFNGLDELETEPROGRAMPROC             fn_DeleteProgram         = nullptr;
+
+static void load_shader_fns() {
+    fn_CreateShader         = (PFNGLCREATESHADERPROC)            eglGetProcAddress("glCreateShader");
+    fn_ShaderSource         = (PFNGLSHADERSOURCEPROC)            eglGetProcAddress("glShaderSource");
+    fn_CompileShader        = (PFNGLCOMPILESHADERPROC)           eglGetProcAddress("glCompileShader");
+    fn_GetShaderiv          = (PFNGLGETSHADERIVPROC)             eglGetProcAddress("glGetShaderiv");
+    fn_GetShaderInfoLog     = (PFNGLGETSHADERINFOLOGPROC)        eglGetProcAddress("glGetShaderInfoLog");
+    fn_CreateProgram        = (PFNGLCREATEPROGRAMPROC)           eglGetProcAddress("glCreateProgram");
+    fn_AttachShader         = (PFNGLATTACHSHADERPROC)            eglGetProcAddress("glAttachShader");
+    fn_BindAttribLocation   = (PFNGLBINDATTRIBLOCATIONPROC)      eglGetProcAddress("glBindAttribLocation");
+    fn_LinkProgram          = (PFNGLLINKPROGRAMPROC)             eglGetProcAddress("glLinkProgram");
+    fn_GetProgramiv         = (PFNGLGETPROGRAMIVPROC)            eglGetProcAddress("glGetProgramiv");
+    fn_GetProgramInfoLog    = (PFNGLGETPROGRAMINFOLOGPROC)       eglGetProcAddress("glGetProgramInfoLog");
+    fn_UseProgram           = (PFNGLUSEPROGRAMPROC)              eglGetProcAddress("glUseProgram");
+    fn_GetUniformLocation   = (PFNGLGETUNIFORMLOCATIONPROC)      eglGetProcAddress("glGetUniformLocation");
+    fn_Uniform1i            = (PFNGLUNIFORM1IPROC)               eglGetProcAddress("glUniform1i");
+    fn_Uniform1f            = (PFNGLUNIFORM1FPROC)               eglGetProcAddress("glUniform1f");
+    fn_Uniform3fv           = (PFNGLUNIFORM3FVPROC)              eglGetProcAddress("glUniform3fv");
+    fn_UniformMatrix4fv     = (PFNGLUNIFORMMATRIX4FVPROC)        eglGetProcAddress("glUniformMatrix4fv");
+    fn_EnableVertexAttribArray  = (PFNGLENABLEVERTEXATTRIBARRAYPROC) eglGetProcAddress("glEnableVertexAttribArray");
+    fn_DisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)eglGetProcAddress("glDisableVertexAttribArray");
+    fn_VertexAttribPointer  = (PFNGLVERTEXATTRIBPOINTERPROC)     eglGetProcAddress("glVertexAttribPointer");
+    fn_DeleteShader         = (PFNGLDELETESHADERPROC)            eglGetProcAddress("glDeleteShader");
+    fn_DeleteProgram        = (PFNGLDELETEPROGRAMPROC)           eglGetProcAddress("glDeleteProgram");
+    /* glVertexAttribDivisor: core in GL 3.3; also via GL_ARB_instanced_arrays on GL 3.1 */
+    fn_VertexAttribDivisor  = (PFNGLVERTEXATTRIBDIVISORPROC)
+        eglGetProcAddress("glVertexAttribDivisor");
+    if (!fn_VertexAttribDivisor)
+        fn_VertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)
+            eglGetProcAddress("glVertexAttribDivisorARB");
+    fn_DrawArraysInstanced  = (PFNGLDRAWARRAYSINSTANCEDPROC)
+        eglGetProcAddress("glDrawArraysInstanced");
+    if (!fn_DrawArraysInstanced)
+        fn_DrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)
+            eglGetProcAddress("glDrawArraysInstancedARB");
 }
 
 /* Column-major 4×4 matrix helpers (match OpenGL convention exactly) */
@@ -319,6 +385,12 @@ static unsigned int latticeGrid[LATSIZE][LATSIZE][LATSIZE];
 static GLuint g_all_vbo;                   /* single buffer for all 20 objects */
 static int    g_obj_start [NUMOBJECTS];    /* first vertex of each object */
 static int    g_obj_vcount[NUMOBJECTS];    /* vertex count of each object */
+static GLuint g_inst_vbo  = 0;            /* per-frame per-instance translation data */
+static GLuint g_prog      = 0;            /* shader program */
+static float  g_proj_mat[16];             /* projection matrix (stored by setupProjection) */
+/* Uniform locations (valid after build_shader_program) */
+static GLint  g_u_proj, g_u_mv, g_u_lit, g_u_shin, g_u_ldir;
+static GLint  g_u_smap, g_u_fog, g_u_fog0, g_u_fog1, g_u_tex, g_u_samp;
 static float bPnt[10][6];
 static float path[7][6];
 static int transitions[20][6] = {
@@ -616,6 +688,8 @@ static void setupProjection(int w, int h) {
     mat[11] = -1.0f;
     mat[14] = -(0.02f + 0.0002f / (float)dDepth);
 
+    memcpy(g_proj_mat, mat, sizeof(mat));   /* used by instancing shaders each frame */
+
     glMatrixMode(GL_PROJECTION);
     glLoadMatrixf(mat);
     glViewport(0, 0, w, h);
@@ -705,77 +779,255 @@ static void update_physics() {
 }
 
 /* -------------------------------------------------------------------------
+ * Shader build + uniform upload
+ * ---------------------------------------------------------------------- */
+
+static void build_shader_program() {
+    static const char VERT_SRC[] =
+        "#version 140\n"
+        "in vec3 a_pos;\n"
+        "in vec3 a_nrm;\n"
+        "in vec2 a_tc;\n"
+        "in vec4 a_col;\n"
+        "in vec3 a_inst;\n"            /* per-instance world-space translation */
+        "uniform mat4  u_proj;\n"
+        "uniform mat4  u_mv;\n"
+        "uniform int   u_lit;\n"
+        "uniform float u_shin;\n"
+        "uniform vec3  u_ldir;\n"      /* light direction in eye space, normalised */
+        "uniform int   u_smap;\n"
+        "uniform int   u_fog;\n"
+        "uniform float u_fog0;\n"
+        "uniform float u_fog1;\n"
+        "out vec4  v_col;\n"
+        "out vec2  v_tc;\n"
+        "out float v_fog;\n"
+        "void main() {\n"
+        "    vec4 eye = u_mv * vec4(a_pos + a_inst, 1.0);\n"
+        "    gl_Position = u_proj * eye;\n"
+        "    vec3 n = normalize(mat3(u_mv) * a_nrm);\n"
+        "    if (u_lit == 1) {\n"
+        "        float d = max(dot(n, u_ldir), 0.0);\n"
+        "        vec3  h = normalize(u_ldir + normalize(-eye.xyz));\n"
+        "        float s = pow(max(dot(n, h), 0.0), max(u_shin, 1.0));\n"
+        /* 0.2 = GL_LIGHT_MODEL_AMBIENT default; specular colour is white */
+        "        v_col = vec4(a_col.rgb * (d + 0.2) + vec3(s), a_col.a);\n"
+        "    } else {\n"
+        "        v_col = a_col;\n"
+        "    }\n"
+        "    if (u_smap == 1) {\n"
+        "        vec3  r = reflect(normalize(eye.xyz), n);\n"
+        "        float m = 2.0 * sqrt(max(r.x*r.x + r.y*r.y + (r.z+1.0)*(r.z+1.0), 0.0001));\n"
+        "        v_tc = vec2(r.x/m + 0.5, r.y/m + 0.5);\n"
+        "    } else {\n"
+        "        v_tc = a_tc;\n"
+        "    }\n"
+        "    float dep = abs(eye.z);\n"
+        "    v_fog = (u_fog == 1) ? clamp((u_fog1-dep)/(u_fog1-u_fog0), 0.0, 1.0) : 1.0;\n"
+        "}\n";
+
+    static const char FRAG_SRC[] =
+        "#version 140\n"
+        "in vec4  v_col;\n"
+        "in vec2  v_tc;\n"
+        "in float v_fog;\n"
+        /* 0=no tex  1=modulate(RGB)  2=decal(RGBA)  3=modulate alpha only (GL_ALPHA textures) */
+        "uniform int       u_tex;\n"
+        "uniform sampler2D u_samp;\n"
+        "out vec4 frag;\n"
+        "void main() {\n"
+        "    vec4 c = v_col;\n"
+        "    if (u_tex == 1) {\n"
+        "        c *= texture(u_samp, v_tc);\n"
+        "    } else if (u_tex == 2) {\n"
+        "        vec4 t = texture(u_samp, v_tc);\n"
+        "        c = vec4(mix(c.rgb, t.rgb, t.a), c.a);\n"
+        "    } else if (u_tex == 3) {\n"
+        /* GL_ALPHA textures return (0,0,0,A) via texture(); only modulate alpha */
+        "        c.a *= texture(u_samp, v_tc).a;\n"
+        "    }\n"
+        "    frag = vec4(c.rgb * v_fog, c.a);\n"
+        "}\n";
+
+    auto compile = [](GLenum type, const char *src) -> GLuint {
+        GLuint s = fn_CreateShader(type);
+        fn_ShaderSource(s, 1, &src, NULL);
+        fn_CompileShader(s);
+        GLint ok; fn_GetShaderiv(s, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            char log[512]; fn_GetShaderInfoLog(s, 512, NULL, log);
+            fprintf(stderr, "lattice shader: %s\n", log);
+        }
+        return s;
+    };
+
+    GLuint vs = compile(GL_VERTEX_SHADER,   VERT_SRC);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, FRAG_SRC);
+
+    if (g_prog) fn_DeleteProgram(g_prog);
+    g_prog = fn_CreateProgram();
+    fn_AttachShader(g_prog, vs);
+    fn_AttachShader(g_prog, fs);
+    fn_BindAttribLocation(g_prog, 0, "a_pos");
+    fn_BindAttribLocation(g_prog, 1, "a_nrm");
+    fn_BindAttribLocation(g_prog, 2, "a_tc");
+    fn_BindAttribLocation(g_prog, 3, "a_col");
+    fn_BindAttribLocation(g_prog, 4, "a_inst");
+    fn_LinkProgram(g_prog);
+    GLint ok; fn_GetProgramiv(g_prog, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[512]; fn_GetProgramInfoLog(g_prog, 512, NULL, log);
+        fprintf(stderr, "lattice link: %s\n", log);
+    }
+    fn_DeleteShader(vs);
+    fn_DeleteShader(fs);
+
+    fn_UseProgram(g_prog);
+    g_u_proj = fn_GetUniformLocation(g_prog, "u_proj");
+    g_u_mv   = fn_GetUniformLocation(g_prog, "u_mv");
+    g_u_lit  = fn_GetUniformLocation(g_prog, "u_lit");
+    g_u_shin = fn_GetUniformLocation(g_prog, "u_shin");
+    g_u_ldir = fn_GetUniformLocation(g_prog, "u_ldir");
+    g_u_smap = fn_GetUniformLocation(g_prog, "u_smap");
+    g_u_fog  = fn_GetUniformLocation(g_prog, "u_fog");
+    g_u_fog0 = fn_GetUniformLocation(g_prog, "u_fog0");
+    g_u_fog1 = fn_GetUniformLocation(g_prog, "u_fog1");
+    g_u_tex  = fn_GetUniformLocation(g_prog, "u_tex");
+    g_u_samp = fn_GetUniformLocation(g_prog, "u_samp");
+    fn_Uniform1i(g_u_samp, 0);   /* always sample from texture unit 0 */
+}
+
+/* Upload preset-dependent shader uniforms.  Call after any preset change. */
+static void set_shader_uniforms() {
+    if (!g_prog) return;
+    fn_UseProgram(g_prog);
+
+    int lit = (dTexture == 3 || dTexture == 4 || dTexture == 6) ? 0 : 1;
+    fn_Uniform1i(g_u_lit, lit);
+
+    float shin = (dTexture == 2) ? 10.0f : (dTexture == 1) ? 1.0f : 50.0f;
+    fn_Uniform1f(g_u_shin, shin);
+
+    int smap = (dTexture==2||dTexture==3||dTexture==4||dTexture==5||dTexture==6) ? 1 : 0;
+    fn_Uniform1i(g_u_smap, smap);
+
+    fn_Uniform1i(g_u_fog,  dFog ? 1 : 0);
+    fn_Uniform1f(g_u_fog0, (float)dDepth * 0.3f);
+    fn_Uniform1f(g_u_fog1, (float)dDepth - 0.1f);
+
+    /* 0=no texture  1=modulate(RGB)  2=decal(RGBA)  3=modulate alpha only (GL_ALPHA tex) */
+    int tex = 0;
+    if (dTexture == 5 || dTexture == 8) tex = 2;         /* RGBA decal: shiny, doughnuts */
+    else if (dTexture == 6 || dTexture == 7) tex = 3;    /* alpha-only: ghostly, circuits */
+    else if (dTexture != 0) tex = 1;                     /* RGB modulate: everything else */
+    fn_Uniform1i(g_u_tex, tex);
+}
+
+/* -------------------------------------------------------------------------
  * Scene render  (uses whatever state update_physics last wrote)
  * ---------------------------------------------------------------------- */
 
 static void render_scene() {
-    glMatrixMode(GL_MODELVIEW);
-    glLoadMatrixf(g_rotMat);
-    glTranslatef(-g_xyz[0], -g_xyz[1], -g_xyz[2]);
+    /* Build MV matrix: rotation * T(-camera_pos) */
+    float T[16], MV[16];
+    mat4_translate(T, -g_xyz[0], -g_xyz[1], -g_xyz[2]);
+    mat4_mul(MV, g_rotMat, T);
+    fn_UniformMatrix4fv(g_u_proj, 1, GL_FALSE, g_proj_mat);
+    fn_UniformMatrix4fv(g_u_mv,   1, GL_FALSE, MV);
 
-    glColor3f(1.0f, 1.0f, 1.0f);
+    /* Transform directional light (world-space, w=0) into eye space via rotation only */
+    static const float lw[3] = {400.0f, 300.0f, 500.0f};
+    static const float llen  = 707.106781f;  /* sqrt(400^2+300^2+500^2) */
+    float le[3] = {
+        (g_rotMat[0]*lw[0] + g_rotMat[4]*lw[1] + g_rotMat[8] *lw[2]) / llen,
+        (g_rotMat[1]*lw[0] + g_rotMat[5]*lw[1] + g_rotMat[9] *lw[2]) / llen,
+        (g_rotMat[2]*lw[0] + g_rotMat[6]*lw[1] + g_rotMat[10]*lw[2]) / llen,
+    };
+    fn_Uniform3fv(g_u_ldir, 1, le);
+
+    if (dTexture) glBindTexture(GL_TEXTURE_2D, texture_id[0]);
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    /* Sphere-map tex gen */
-    if (dTexture == 2 || dTexture == 3 || dTexture == 4 ||
-        dTexture == 5 || dTexture == 6) {
-        glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
-        glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
-        glEnable(GL_TEXTURE_GEN_S);
-        glEnable(GL_TEXTURE_GEN_T);
-    }
-    /* For industrial texture, make sure tex0 is bound (VBOs can't switch per ring) */
-    if (dTexture == 1)
-        glBindTexture(GL_TEXTURE_2D, texture_id[0]);
-
-    /* Smooth shading — normals are correct for both modes; GL_SMOOTH is right for VBOs */
-    glShadeModel(GL_SMOOTH);
-
-    /* Bind the single combined VBO once; pointer setup is shared by all objects */
-    fn_BindBuffer(GL_ARRAY_BUFFER, g_all_vbo);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_NORMAL_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
-    glVertexPointer  (3, GL_FLOAT, 48, (const void *) 0);
-    glNormalPointer  (   GL_FLOAT, 48, (const void *)12);
-    glTexCoordPointer(2, GL_FLOAT, 48, (const void *)24);
-    glColorPointer   (4, GL_FLOAT, 48, (const void *)32);
-
-    int i, j, k;
-    for (i = globalxyz[0]-g_drawDepth; i <= globalxyz[0]+g_drawDepth; i++) {
-        for (j = globalxyz[1]-g_drawDepth; j <= globalxyz[1]+g_drawDepth; j++) {
-            for (k = globalxyz[2]-g_drawDepth; k <= globalxyz[2]+g_drawDepth; k++) {
-                rsVec tv;
-                tv[0] = (float)i - g_xyz[0];
-                tv[1] = (float)j - g_xyz[1];
-                tv[2] = (float)k - g_xyz[2];
-                float tpos[3];
-                tpos[0] = tv[0]*g_rotMat[0]+tv[1]*g_rotMat[4]+tv[2]*g_rotMat[8];
-                tpos[1] = tv[0]*g_rotMat[1]+tv[1]*g_rotMat[5]+tv[2]*g_rotMat[9];
-                tpos[2] = tv[0]*g_rotMat[2]+tv[1]*g_rotMat[6]+tv[2]*g_rotMat[10];
-                if (theCamera->inViewVolume(tpos, 0.9f)) {
-                    int obj    = (int)latticeGrid[myMod(i)][myMod(j)][myMod(k)];
-                    int nverts = g_obj_vcount[obj];
-                    if (nverts == 0) continue;
-
-                    glPushMatrix();
-                    glTranslatef((float)i, (float)j, (float)k);
-                    glDrawArrays(GL_TRIANGLES, g_obj_start[obj], nverts);
-                    glPopMatrix();
-                }
+    /* --- Pass 1: collect visible cells (single loop, avoids duplicate frustum test) */
+    struct CellRef { short i, j, k, t; };
+    static CellRef vis[16000];
+    int nvis = 0;
+    for (int i = globalxyz[0]-g_drawDepth; i <= globalxyz[0]+g_drawDepth; i++) {
+        for (int j = globalxyz[1]-g_drawDepth; j <= globalxyz[1]+g_drawDepth; j++) {
+            for (int k = globalxyz[2]-g_drawDepth; k <= globalxyz[2]+g_drawDepth; k++) {
+                float tv0 = (float)i-g_xyz[0], tv1 = (float)j-g_xyz[1], tv2 = (float)k-g_xyz[2];
+                float ep[3] = {
+                    tv0*g_rotMat[0]+tv1*g_rotMat[4]+tv2*g_rotMat[8],
+                    tv0*g_rotMat[1]+tv1*g_rotMat[5]+tv2*g_rotMat[9],
+                    tv0*g_rotMat[2]+tv1*g_rotMat[6]+tv2*g_rotMat[10],
+                };
+                if (!theCamera->inViewVolume(ep, 0.9f)) continue;
+                int t = (int)latticeGrid[myMod(i)][myMod(j)][myMod(k)];
+                if (g_obj_vcount[t] == 0 || nvis >= 16000) continue;
+                vis[nvis++] = {(short)i,(short)j,(short)k,(short)t};
             }
         }
     }
+    if (nvis == 0) return;
 
+    /* --- Pass 2: count instances per object type, then fill instance buffer */
+    int type_cnt[NUMOBJECTS]   = {};
+    for (int v = 0; v < nvis; v++) type_cnt[vis[v].t]++;
+
+    int type_start[NUMOBJECTS+1];
+    type_start[0] = 0;
+    for (int t = 0; t < NUMOBJECTS; t++) type_start[t+1] = type_start[t] + type_cnt[t];
+    int total = type_start[NUMOBJECTS];
+
+    static float inst_data[16000][3];
+    int fill[NUMOBJECTS] = {};
+    for (int v = 0; v < nvis; v++) {
+        int t   = vis[v].t;
+        int idx = type_start[t] + fill[t]++;
+        inst_data[idx][0] = (float)vis[v].i;
+        inst_data[idx][1] = (float)vis[v].j;
+        inst_data[idx][2] = (float)vis[v].k;
+    }
+
+    /* --- Upload instance translations and set up vertex attributes */
+    fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
+    fn_BufferData(GL_ARRAY_BUFFER, total * 12, inst_data, GL_DYNAMIC_DRAW);
+
+    /* Geometry attributes (attribs 0-3) from the static object VBO */
+    fn_BindBuffer(GL_ARRAY_BUFFER, g_all_vbo);
+    fn_EnableVertexAttribArray(0);
+    fn_EnableVertexAttribArray(1);
+    fn_EnableVertexAttribArray(2);
+    fn_EnableVertexAttribArray(3);
+    fn_VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 48, (const void *) 0);
+    fn_VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 48, (const void *)12);
+    fn_VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 48, (const void *)24);
+    fn_VertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 48, (const void *)32);
+    fn_VertexAttribDivisor(0, 0);
+    fn_VertexAttribDivisor(1, 0);
+    fn_VertexAttribDivisor(2, 0);
+    fn_VertexAttribDivisor(3, 0);
+
+    /* Per-instance attribute (attrib 4): advances once per instance */
+    fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
+    fn_EnableVertexAttribArray(4);
+    fn_VertexAttribDivisor(4, 1);
+
+    /* --- One instanced draw per non-empty object type (~20 calls max) */
+    for (int t = 0; t < NUMOBJECTS; t++) {
+        if (type_cnt[t] == 0) continue;
+        fn_VertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 12,
+                               (const void *)(ptrdiff_t)(type_start[t] * 12));
+        fn_DrawArraysInstanced(GL_TRIANGLES, g_obj_start[t], g_obj_vcount[t], type_cnt[t]);
+    }
+
+    fn_DisableVertexAttribArray(0);
+    fn_DisableVertexAttribArray(1);
+    fn_DisableVertexAttribArray(2);
+    fn_DisableVertexAttribArray(3);
+    fn_DisableVertexAttribArray(4);
     fn_BindBuffer(GL_ARRAY_BUFFER, 0);
-    glDisableClientState(GL_VERTEX_ARRAY);
-    glDisableClientState(GL_NORMAL_ARRAY);
-    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-    glDisableClientState(GL_COLOR_ARRAY);
-
-    glDisable(GL_TEXTURE_GEN_S);
-    glDisable(GL_TEXTURE_GEN_T);
 }
 
 /* -------------------------------------------------------------------------
@@ -919,6 +1171,10 @@ static void initSaver() {
             for (k = 0; k < LATSIZE; k++)
                 latticeGrid[i][j][k] = (unsigned int)rsRandi(NUMOBJECTS);
 
+    build_shader_program();
+    fn_GenBuffers(1, &g_inst_vbo);
+    set_shader_uniforms();
+
     /* Border points */
     for (i = 0; i < 10; i++) for (j = 0; j < 6; j++) bPnt[i][j] = 0.0f;
     bPnt[0][0]= 0.5f; bPnt[0][1]=-0.25f; bPnt[0][2]= 0.25f; bPnt[0][3]=1.0f;
@@ -1052,6 +1308,7 @@ static void applyPreset(int idx) {
             for (int k = 0; k < LATSIZE; k++)
                 latticeGrid[i][j][k] = (unsigned int)rsRandi(NUMOBJECTS);
 
+    set_shader_uniforms();
     g_drawDepth = dDepth + 2;
 
     char title[128];
@@ -1415,6 +1672,7 @@ int main(int argc, char *argv[]) {
 
     /* --- Initialize OpenGL state + screensaver --- */
     load_vbo_fns();
+    load_shader_fns();
     initSaver();
 
     /* --- Frame-callback render loop --- */
@@ -1427,6 +1685,8 @@ int main(int argc, char *argv[]) {
     }
 
     /* --- Cleanup --- */
+    if (g_prog)     fn_DeleteProgram(g_prog);
+    if (g_inst_vbo) fn_DeleteBuffers(1, &g_inst_vbo);
     fn_DeleteBuffers(1, &g_all_vbo);
     delete theCamera;
     eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
