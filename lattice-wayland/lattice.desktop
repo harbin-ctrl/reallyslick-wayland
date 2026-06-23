@@ -6,5 +6,5 @@ Comment=Fly through an infinite lattice of brass rings (Really Slick Screensaver
 Exec=lattice
 Icon=lattice
 Terminal=false
-Categories=DesktopToys;
+Categories=DesktopToy;
 Keywords=screensaver;opengl;wayland;3d;
