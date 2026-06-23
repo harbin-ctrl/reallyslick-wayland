@@ -237,6 +237,7 @@ static bool dSmooth    = false;
 static bool dFog       = true;
 static int  dTexture   = 4;    /* brassmesh default */
 static const char *dPresetName = "brassmesh";
+static int         g_preset_idx = 2;   /* brassmesh */
 
 static unsigned int texture_id[2];
 
@@ -876,6 +877,78 @@ static const struct xdg_toplevel_listener toplevel_lst = {
 };
 
 /* -------------------------------------------------------------------------
+ * Runtime preset switching — tears down GL visual state and rebuilds it
+ * without resetting the camera or path so the transition is seamless.
+ * ---------------------------------------------------------------------- */
+
+static void applyPreset(int idx) {
+    const Preset &P = PRESETS[idx];
+    dLongitude = P.longitude;  dLatitude = P.latitude;
+    dThick     = P.thick;      dDensity  = P.density;
+    dDepth     = P.depth;      dFov      = P.fov;
+    dPathrand  = P.pathrand;   dSpeed    = P.speed;
+    dSmooth    = P.smooth;     dFog      = P.fog;
+    dTexture   = P.texType;    dPresetName = P.name;
+
+    /* Tear down current visual GL state */
+    glDisable(GL_LIGHTING);
+    glDisable(GL_BLEND);
+    glDisable(GL_FOG);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+    glDeleteTextures(2, texture_id);
+    glDeleteLists(list_base, NUMOBJECTS);
+
+    /* Rebuild for new preset */
+    if (dTexture != 2 && dTexture != 6) glEnable(GL_DEPTH_TEST);
+
+    if (dTexture != 3 && dTexture != 4 && dTexture != 6) {
+        glEnable(GL_LIGHTING); glEnable(GL_LIGHT0);
+        glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE);
+        float ambient[]  = {0.0f, 0.0f, 0.0f, 0.0f};
+        float diffuse[]  = {1.0f, 1.0f, 1.0f, 0.0f};
+        float specular[] = {1.0f, 1.0f, 1.0f, 0.0f};
+        float position[] = {400.0f, 300.0f, 500.0f, 0.0f};
+        glLightfv(GL_LIGHT0, GL_AMBIENT,  ambient);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE,  diffuse);
+        glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
+        glLightfv(GL_LIGHT0, GL_POSITION, position);
+    }
+    glEnable(GL_COLOR_MATERIAL);
+    if (dTexture == 0 || dTexture == 5 || dTexture >= 7) {
+        glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);
+        glColorMaterial(GL_FRONT, GL_SPECULAR);
+    }
+    if (dTexture == 2) {
+        glMaterialf(GL_FRONT, GL_SHININESS, 10.0f);
+        glColorMaterial(GL_FRONT, GL_SPECULAR);
+    }
+    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+
+    if (dTexture == 2 || dTexture == 6) { glBlendFunc(GL_SRC_ALPHA, GL_ONE); glEnable(GL_BLEND); }
+    if (dTexture == 7) { glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glEnable(GL_BLEND); }
+
+    if (dFog) {
+        glEnable(GL_FOG);
+        float fog_color[] = {0.0f, 0.0f, 0.0f, 0.0f};
+        glFogfv(GL_FOG_COLOR, fog_color);
+        glFogf(GL_FOG_MODE, GL_LINEAR);
+        glFogf(GL_FOG_START, (float)dDepth * 0.3f);
+        glFogf(GL_FOG_END,   (float)dDepth - 0.1f);
+    }
+    if (dTexture) { glEnable(GL_TEXTURE_2D); initTextures(); }
+    makeLatticeObjects();
+    for (int i = 0; i < LATSIZE; i++)
+        for (int j = 0; j < LATSIZE; j++)
+            for (int k = 0; k < LATSIZE; k++)
+                latticeGrid[i][j][k] = list_base + rsRandi(NUMOBJECTS);
+
+    char title[128];
+    snprintf(title, sizeof(title), "Lattice — %s  (← → to cycle)", dPresetName);
+    xdg_toplevel_set_title(g_toplevel, title);
+}
+
+/* -------------------------------------------------------------------------
  * Keyboard callbacks
  * ---------------------------------------------------------------------- */
 
@@ -895,6 +968,10 @@ static void kb_key(void *d, struct wl_keyboard *kb, uint32_t ser,
             xdg_toplevel_unset_fullscreen(g_toplevel);
         else
             xdg_toplevel_set_fullscreen(g_toplevel, NULL);
+    } else if (key == 105 || key == 106) {  /* KEY_LEFT / KEY_RIGHT */
+        int n = 0; while (PRESETS[n].name) n++;
+        g_preset_idx = (g_preset_idx + (key == 106 ? 1 : n - 1)) % n;
+        applyPreset(g_preset_idx);
     }
 }
 static void kb_modifiers(void *d, struct wl_keyboard *kb, uint32_t ser,
@@ -1051,6 +1128,7 @@ int main(int argc, char *argv[]) {
                     dSmooth     = P.smooth;      dFog       = P.fog;
                     dTexture    = P.texType;
                     dPresetName = P.name;
+                    g_preset_idx = p;
                     found = true; break;
                 }
             }
@@ -1106,7 +1184,7 @@ int main(int argc, char *argv[]) {
     g_toplevel = xdg_surface_get_toplevel(g_xdg_surface);
     xdg_toplevel_add_listener(g_toplevel, &toplevel_lst, NULL);
     char title[128];
-    snprintf(title, sizeof(title), "Lattice — %s  (F11 fullscreen)", dPresetName);
+    snprintf(title, sizeof(title), "Lattice — %s  (← → cycle, F fullscreen)", dPresetName);
     xdg_toplevel_set_title(g_toplevel, title);
     xdg_toplevel_set_app_id(g_toplevel, "lattice");
 
