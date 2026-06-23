@@ -6,7 +6,7 @@
  * Build:  make
  * Run:    ./lattice [--preset NAME] [options]
  * Quit:   Escape or close button
- * Keys:   F11 = toggle fullscreen
+ * Keys:   F / F11 = toggle fullscreen, Q / Esc = quit
  *
  * Presets (--preset NAME):
  *   regular    — default look, random colours
@@ -881,9 +881,9 @@ static void kb_leave(void *d, struct wl_keyboard *kb, uint32_t ser,
 static void kb_key(void *d, struct wl_keyboard *kb, uint32_t ser,
                     uint32_t t, uint32_t key, uint32_t state) {
     if (state != WL_KEYBOARD_KEY_STATE_PRESSED) return;
-    if (key == 1) {  /* KEY_ESC */
+    if (key == 1 || key == 16) {  /* KEY_ESC or KEY_Q */
         g_running = 0;
-    } else if (key == 87) {  /* KEY_F11 — toggle fullscreen */
+    } else if (key == 87 || key == 33) {  /* KEY_F11 or KEY_F */
         if (g_fullscreen)
             xdg_toplevel_unset_fullscreen(g_toplevel);
         else
