@@ -623,6 +623,7 @@ static void draw() {
     oldDir[0] = -rotMat[2];
     oldDir[1] = -rotMat[6];
     oldDir[2] = -rotMat[10];
+    angvel.scale(1.0f - frameTime * 0.1f);  /* gradual backoff prevents long-term spin accumulation */
     oldAngvel = angvel;
 
     glMatrixMode(GL_MODELVIEW);
