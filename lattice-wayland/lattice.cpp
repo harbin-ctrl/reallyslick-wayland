@@ -34,6 +34,7 @@
 #include <cstring>
 #include <cmath>
 #include <ctime>
+#include <vector>
 #include <unistd.h>
 #include <time.h>
 
@@ -159,6 +160,74 @@ public:
 };
 
 /* -------------------------------------------------------------------------
+ * VBO infrastructure (GL 1.5, universally supported)
+ *
+ * All torus geometry is baked into per-object VBOs at init time:
+ * positions, normals, texcoords, and colours are pre-transformed by the
+ * ring's local matrix (translate + rotate) so each visible cell costs
+ * exactly one glDrawArrays call instead of up to six display-list chains.
+ *
+ * On panfrost (and any driver that emulates display lists in software),
+ * this eliminates the Mesa compat-layer overhead entirely.  On desktop
+ * GPUs the path is equivalent or slightly faster — VBOs have been the
+ * canonical draw path since OpenGL 1.5 (2003).
+ * ---------------------------------------------------------------------- */
+
+struct GVertex {           /* 48 bytes, matches glVertexPointer offsets below */
+    float pos[3];          /* offset  0 */
+    float normal[3];       /* offset 12 */
+    float tc[2];           /* offset 24 */
+    float color[4];        /* offset 32 — alpha always 1 */
+};
+
+#ifndef GL_ARRAY_BUFFER
+#define GL_ARRAY_BUFFER  0x8892
+#endif
+#ifndef GL_STATIC_DRAW
+#define GL_STATIC_DRAW   0x88B4
+#endif
+
+typedef void (*PFN_GenBuffers_t)   (GLsizei, GLuint *);
+typedef void (*PFN_BindBuffer_t)   (GLenum, GLuint);
+typedef void (*PFN_BufferData_t)   (GLenum, ptrdiff_t, const void *, GLenum);
+typedef void (*PFN_DeleteBuffers_t)(GLsizei, const GLuint *);
+
+static PFN_GenBuffers_t    fn_GenBuffers    = nullptr;
+static PFN_BindBuffer_t    fn_BindBuffer    = nullptr;
+static PFN_BufferData_t    fn_BufferData    = nullptr;
+static PFN_DeleteBuffers_t fn_DeleteBuffers = nullptr;
+
+static void load_vbo_fns() {
+    fn_GenBuffers    = (PFN_GenBuffers_t)   eglGetProcAddress("glGenBuffers");
+    fn_BindBuffer    = (PFN_BindBuffer_t)   eglGetProcAddress("glBindBuffer");
+    fn_BufferData    = (PFN_BufferData_t)   eglGetProcAddress("glBufferData");
+    fn_DeleteBuffers = (PFN_DeleteBuffers_t)eglGetProcAddress("glDeleteBuffers");
+}
+
+/* Column-major 4×4 matrix helpers (match OpenGL convention exactly) */
+static void mat4_identity(float M[16]) {
+    memset(M, 0, 64); M[0]=M[5]=M[10]=M[15]=1.0f;
+}
+static void mat4_translate(float M[16], float tx, float ty, float tz) {
+    mat4_identity(M); M[12]=tx; M[13]=ty; M[14]=tz;
+}
+static void mat4_rotate(float M[16], float deg, float ax, float ay, float az) {
+    float a=deg*0.0174532925f, c=cosf(a), s=sinf(a), ic=1.0f-c;
+    float len=sqrtf(ax*ax+ay*ay+az*az); ax/=len; ay/=len; az/=len;
+    mat4_identity(M);
+    M[0] =ax*ax*ic+c;    M[1] =ax*ay*ic+az*s;  M[2] =ax*az*ic-ay*s;
+    M[4] =ay*ax*ic-az*s; M[5] =ay*ay*ic+c;     M[6] =ay*az*ic+ax*s;
+    M[8] =az*ax*ic+ay*s; M[9] =az*ay*ic-ax*s;  M[10]=az*az*ic+c;
+}
+static void mat4_mul(float C[16], const float A[16], const float B[16]) {
+    for (int c=0; c<4; c++)
+        for (int r=0; r<4; r++) {
+            float s=0; for (int k=0; k<4; k++) s+=A[k*4+r]*B[c*4+k];
+            C[c*4+r]=s;
+        }
+}
+
+/* -------------------------------------------------------------------------
  * Camera (ported from camera.h / camera.cpp)
  * ---------------------------------------------------------------------- */
 
@@ -247,7 +316,9 @@ static unsigned int texture_id[2];
 static float aspectRatio;
 static float frameTime = 0.0f;
 static unsigned int latticeGrid[LATSIZE][LATSIZE][LATSIZE];
-static unsigned int list_base;
+static GLuint g_all_vbo;                   /* single buffer for all 20 objects */
+static int    g_obj_start [NUMOBJECTS];    /* first vertex of each object */
+static int    g_obj_vcount[NUMOBJECTS];    /* vertex count of each object */
 static float bPnt[10][6];
 static float path[7][6];
 static int transitions[20][6] = {
@@ -328,158 +399,149 @@ static float interpolate(float a, float b, float c, float d, float where) {
 }
 
 /* -------------------------------------------------------------------------
- * Torus geometry
+ * Torus geometry — CPU side only (no GL calls; used by buildLatticeVBOs)
  * ---------------------------------------------------------------------- */
 
-static void makeTorus(int smooth, int longitude, int latitude,
-                      float centerradius, float thickradius)
+/* Build one torus into buf as GL_TRIANGLES, with M's transform baked in.
+ * Strip-to-triangle conversion preserves winding. */
+static void buildTorusCPU(std::vector<GVertex> &buf,
+                           int smooth, int lon, int lat,
+                           float cr, float tr,
+                           const float M[16], const float col[4])
 {
-    int i, j;
-    float r, rr, z, zz, cosa, sina, cosn, cosnn, sinn, sinnn;
-    float ncosa, nsina, u, v1, v2, ustep, vstep, temp;
-    float oldcosa=0, oldsina=0, oldncosa=0, oldnsina=0;
-    float oldcosn=0, oldcosnn=0, oldsinn=0, oldsinnn=0;
+    float vstep = 1.0f / (float)lat;
+    float ustep = (float)(int)(cr/tr + 0.5f) / (float)lon;
+    GVertex strip[204*2];   /* (lon+1)*2, lon≤100 */
 
-    glShadeModel(smooth ? GL_SMOOTH : GL_FLAT);
+    float v2 = 0.0f;
+    for (int i = 0; i < lat; i++) {
+        float v1=v2; v2+=vstep;
+        float ti =PIx2*(float)i    /(float)lat;
+        float ti1=PIx2*(float)(i+1)/(float)lat;
+        float cosn=cosf(ti), sinn=sinf(ti), cosnn=cosf(ti1), sinnn=sinf(ti1);
+        float r=cr+tr*cosn, rr=cr+tr*cosnn, z=tr*sinn, zz=tr*sinnn;
 
-    vstep = 1.0f / (float)latitude;
-    ustep = (float)(int)(centerradius/thickradius + 0.5f) / (float)longitude;
-    v2 = 0.0f;
-
-    for (i = 0; i < latitude; i++) {
-        temp = PIx2 * (float)i / (float)latitude;
-        cosn = cosf(temp); sinn = sinf(temp);
-        temp = PIx2 * (float)(i+1) / (float)latitude;
-        cosnn = cosf(temp); sinnn = sinf(temp);
-        r  = centerradius + thickradius * cosn;
-        rr = centerradius + thickradius * cosnn;
-        z  = thickradius * sinn;
-        zz = thickradius * sinnn;
+        float nc=cosn, ns=sinn, ncc=cosnn, nss=sinnn;
         if (!smooth) {
-            temp = PIx2 * ((float)i + 0.5f) / (float)latitude;
-            cosn = cosnn = cosf(temp);
-            sinn = sinnn = sinf(temp);
+            float mid=PIx2*((float)i+0.5f)/(float)lat;
+            nc=ncc=cosf(mid); ns=nss=sinf(mid);
         }
-        v1 = v2; v2 += vstep; u = 0.0f;
-        glBegin(GL_TRIANGLE_STRIP);
-        for (j = 0; j < longitude; j++) {
-            temp = PIx2 * (float)j / (float)longitude;
-            cosa = cosf(temp); sina = sinf(temp);
-            if (smooth) { ncosa = cosa; nsina = sina; }
+
+        int nv=0; float u=0.0f;
+        float old_c=1,old_s=0,old_nc=1,old_ns=0;
+        for (int j=0; j<lon; j++) {
+            float phi=PIx2*(float)j/(float)lon;
+            float cosa=cosf(phi), sina=sinf(phi), ncosa, nsina;
+            if (smooth) { ncosa=cosa; nsina=sina; }
             else {
-                temp = PIx2 * ((float)j - 0.5f) / (float)longitude;
-                ncosa = cosf(temp); nsina = sinf(temp);
+                float pn=PIx2*((float)j-0.5f)/(float)lon;
+                ncosa=cosf(pn); nsina=sinf(pn);
             }
-            if (j == 0) {
-                oldcosa=cosa; oldsina=sina; oldncosa=ncosa; oldnsina=nsina;
-                oldcosn=cosn; oldcosnn=cosnn; oldsinn=sinn; oldsinnn=sinnn;
-            }
-            glNormal3f(cosnn*ncosa, cosnn*nsina, sinnn);
-            glTexCoord2f(u, v2);
-            glVertex3f(cosa*rr, sina*rr, zz);
-            glNormal3f(cosn*ncosa, cosn*nsina, sinn);
-            glTexCoord2f(u, v1);
-            glVertex3f(cosa*r, sina*r, z);
-            u += ustep;
+            if (j==0){old_c=cosa;old_s=sina;old_nc=ncosa;old_ns=nsina;}
+
+            strip[nv++]={{cosa*rr,sina*rr,zz},{ncc*ncosa,ncc*nsina,nss},{u,v2},{col[0],col[1],col[2],col[3]}};
+            strip[nv++]={{cosa*r, sina*r, z },{nc *ncosa,nc *nsina,ns },{u,v1},{col[0],col[1],col[2],col[3]}};
+            u+=ustep;
         }
-        glNormal3f(oldcosnn*oldncosa, oldcosnn*oldnsina, oldsinnn);
-        glTexCoord2f(u, v2);
-        glVertex3f(oldcosa*rr, oldsina*rr, zz);
-        glNormal3f(oldcosn*oldncosa, oldcosn*oldnsina, oldsinn);
-        glTexCoord2f(u, v1);
-        glVertex3f(oldcosa*r, oldsina*r, z);
-        glEnd();
+        strip[nv++]={{old_c*rr,old_s*rr,zz},{ncc*old_nc,ncc*old_ns,nss},{u,v2},{col[0],col[1],col[2],col[3]}};
+        strip[nv++]={{old_c*r, old_s*r, z },{nc *old_nc,nc *old_ns,ns },{u,v1},{col[0],col[1],col[2],col[3]}};
+
+        for (int t=0; t<nv-2; t++) {
+            GVertex a=strip[t], b=strip[t+1], c_=strip[t+2];
+            if (t%2!=0) { GVertex tmp=a; a=b; b=tmp; }
+            auto xf=[&](GVertex &v){
+                float px=v.pos[0],py=v.pos[1],pz=v.pos[2];
+                float nx=v.normal[0],ny=v.normal[1],nz=v.normal[2];
+                v.pos[0]=M[0]*px+M[4]*py+M[8]*pz +M[12];
+                v.pos[1]=M[1]*px+M[5]*py+M[9]*pz +M[13];
+                v.pos[2]=M[2]*px+M[6]*py+M[10]*pz+M[14];
+                v.normal[0]=M[0]*nx+M[4]*ny+M[8]*nz;
+                v.normal[1]=M[1]*nx+M[5]*ny+M[9]*nz;
+                v.normal[2]=M[2]*nx+M[6]*ny+M[10]*nz;
+            };
+            xf(a); xf(b); xf(c_);
+            buf.push_back(a); buf.push_back(b); buf.push_back(c_);
+        }
     }
 }
 
-static void setMaterialAttribs() {
-    /* Original logic: random colour for no-texture and shiny/ghostly/circuit/doughnut;
-       industrial picks one of the two textures randomly; others do nothing
-       (sphere-mapped textures use glColor white set in draw()). */
-    if (dTexture == 0 || dTexture >= 5)
-        glColor3f(rsRandf(1.0f), rsRandf(1.0f), rsRandf(1.0f));
-    if (dTexture == 1)
-        glBindTexture(GL_TEXTURE_2D, texture_id[rsRandi(2)]);
-}
+/* buildLatticeVBOs — replaces makeLatticeObjects.
+ * Replicates the exact same rand() call sequence so colours and ring
+ * orientations are identical to what display lists would have produced.
+ * Transforms are baked into vertex positions/normals at build time.
+ * All 20 objects are packed into one VBO so render_scene binds once
+ * and varies only the start/count per glDrawArrays call. */
+static void buildLatticeVBOs() {
+    std::vector<GVertex> all_verts;
+    all_verts.reserve(NUMOBJECTS * 576);
 
-static void makeLatticeObjects() {
-    int i, d = 0;
     float thick = (float)dThick * 0.001f;
+    int d = 0;
 
-    list_base = glGenLists(NUMOBJECTS);
-
-    for (i = 0; i < NUMOBJECTS; i++) {
-        glNewList(list_base + i, GL_COMPILE);
-
-        /* Industrial uses 2 textures; others all use texture_id[0] */
-        if (dTexture >= 2)
-            glBindTexture(GL_TEXTURE_2D, texture_id[0]);
-
-        if (d < dDensity) {
-            glPushMatrix();
-            setMaterialAttribs();
-            glTranslatef(-0.25f, -0.25f, -0.25f);
-            if (rsRandi(2)) glRotatef(180.0f, 1,0,0);
-            makeTorus(dSmooth, dLongitude, dLatitude, 0.36f-thick, thick);
-            glPopMatrix();
+    auto pickCol = [&](float col[4]) {
+        if (dTexture == 0 || dTexture >= 5) {
+            col[0]=rsRandf(1.0f); col[1]=rsRandf(1.0f);
+            col[2]=rsRandf(1.0f); col[3]=1.0f;
+        } else if (dTexture == 1) {
+            rsRandi(2);
+            col[0]=col[1]=col[2]=col[3]=1.0f;
+        } else {
+            col[0]=col[1]=col[2]=col[3]=1.0f;
         }
+    };
+
+    for (int i = 0; i < NUMOBJECTS; i++) {
+        g_obj_start[i]  = (int)all_verts.size();
+        g_obj_vcount[i] = 0;
+
+        float col[4], T[16], R[16], M[16];
+
+#define RING(rotExpr)                                              \
+        if (d < dDensity) {                                        \
+            pickCol(col); rotExpr;                                 \
+            size_t before = all_verts.size();                      \
+            buildTorusCPU(all_verts, dSmooth, dLongitude,          \
+                          dLatitude, 0.36f-thick, thick, M, col);  \
+            g_obj_vcount[i] += (int)(all_verts.size() - before);  \
+        }                                                          \
         d = (d+37) % 100;
 
-        if (d < dDensity) {
-            glPushMatrix();
-            setMaterialAttribs();
-            glTranslatef(0.25f, -0.25f, -0.25f);
-            if (rsRandi(2)) glRotatef(90.0f, 1,0,0);
-            else            glRotatef(-90.0f, 1,0,0);
-            makeTorus(dSmooth, dLongitude, dLatitude, 0.36f-thick, thick);
-            glPopMatrix();
-        }
-        d = (d+37) % 100;
+        RING(mat4_translate(T,-0.25f,-0.25f,-0.25f);
+             if(rsRandi(2)){mat4_rotate(R,180.f,1,0,0);mat4_mul(M,T,R);}
+             else memcpy(M,T,64);)
 
-        if (d < dDensity) {
-            glPushMatrix();
-            setMaterialAttribs();
-            glTranslatef(0.25f, -0.25f, 0.25f);
-            if (rsRandi(2)) glRotatef(90.0f, 0,1,0);
-            else            glRotatef(-90.0f, 0,1,0);
-            makeTorus(dSmooth, dLongitude, dLatitude, 0.36f-thick, thick);
-            glPopMatrix();
-        }
-        d = (d+37) % 100;
+        RING(mat4_translate(T,0.25f,-0.25f,-0.25f);
+             mat4_rotate(R,rsRandi(2)?90.f:-90.f,1,0,0); mat4_mul(M,T,R);)
 
-        if (d < dDensity) {
-            glPushMatrix();
-            setMaterialAttribs();
-            glTranslatef(0.25f, 0.25f, 0.25f);
-            if (rsRandi(2)) glRotatef(180.0f, 1,0,0);
-            makeTorus(dSmooth, dLongitude, dLatitude, 0.36f-thick, thick);
-            glPopMatrix();
-        }
-        d = (d+37) % 100;
+        RING(mat4_translate(T,0.25f,-0.25f,0.25f);
+             mat4_rotate(R,rsRandi(2)?90.f:-90.f,0,1,0); mat4_mul(M,T,R);)
 
-        if (d < dDensity) {
-            glPushMatrix();
-            setMaterialAttribs();
-            glTranslatef(-0.25f, 0.25f, 0.25f);
-            if (rsRandi(2)) glRotatef(90.0f, 1,0,0);
-            else            glRotatef(-90.0f, 1,0,0);
-            makeTorus(dSmooth, dLongitude, dLatitude, 0.36f-thick, thick);
-            glPopMatrix();
-        }
-        d = (d+37) % 100;
+        RING(mat4_translate(T,0.25f,0.25f,0.25f);
+             if(rsRandi(2)){mat4_rotate(R,180.f,1,0,0);mat4_mul(M,T,R);}
+             else memcpy(M,T,64);)
 
-        if (d < dDensity) {
-            glPushMatrix();
-            setMaterialAttribs();
-            glTranslatef(-0.25f, 0.25f, -0.25f);
-            if (rsRandi(2)) glRotatef(90.0f, 0,1,0);
-            else            glRotatef(-90.0f, 0,1,0);
-            makeTorus(dSmooth, dLongitude, dLatitude, 0.36f-thick, thick);
-            glPopMatrix();
-        }
+        RING(mat4_translate(T,-0.25f,0.25f,0.25f);
+             mat4_rotate(R,rsRandi(2)?90.f:-90.f,1,0,0); mat4_mul(M,T,R);)
 
-        glEndList();
-        d = (d+37) % 100;
+        /* Ring 5 — no trailing d advance in the original before glEndList */
+        if (d < dDensity) {
+            pickCol(col);
+            mat4_translate(T,-0.25f,0.25f,-0.25f);
+            mat4_rotate(R,rsRandi(2)?90.f:-90.f,0,1,0); mat4_mul(M,T,R);
+            size_t before = all_verts.size();
+            buildTorusCPU(all_verts,dSmooth,dLongitude,dLatitude,0.36f-thick,thick,M,col);
+            g_obj_vcount[i] += (int)(all_verts.size() - before);
+        }
+        d = (d+37) % 100;   /* matches the d advance after glEndList in original */
+#undef RING
+    }
+
+    fn_GenBuffers(1, &g_all_vbo);
+    if (!all_verts.empty()) {
+        fn_BindBuffer(GL_ARRAY_BUFFER, g_all_vbo);
+        fn_BufferData(GL_ARRAY_BUFFER, (ptrdiff_t)(all_verts.size()*sizeof(GVertex)),
+                      all_verts.data(), GL_STATIC_DRAW);
+        fn_BindBuffer(GL_ARRAY_BUFFER, 0);
     }
 }
 
@@ -654,6 +716,7 @@ static void render_scene() {
     glColor3f(1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    /* Sphere-map tex gen */
     if (dTexture == 2 || dTexture == 3 || dTexture == 4 ||
         dTexture == 5 || dTexture == 6) {
         glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
@@ -661,6 +724,23 @@ static void render_scene() {
         glEnable(GL_TEXTURE_GEN_S);
         glEnable(GL_TEXTURE_GEN_T);
     }
+    /* For industrial texture, make sure tex0 is bound (VBOs can't switch per ring) */
+    if (dTexture == 1)
+        glBindTexture(GL_TEXTURE_2D, texture_id[0]);
+
+    /* Smooth shading — normals are correct for both modes; GL_SMOOTH is right for VBOs */
+    glShadeModel(GL_SMOOTH);
+
+    /* Bind the single combined VBO once; pointer setup is shared by all objects */
+    fn_BindBuffer(GL_ARRAY_BUFFER, g_all_vbo);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    glVertexPointer  (3, GL_FLOAT, 48, (const void *) 0);
+    glNormalPointer  (   GL_FLOAT, 48, (const void *)12);
+    glTexCoordPointer(2, GL_FLOAT, 48, (const void *)24);
+    glColorPointer   (4, GL_FLOAT, 48, (const void *)32);
 
     int i, j, k;
     for (i = globalxyz[0]-g_drawDepth; i <= globalxyz[0]+g_drawDepth; i++) {
@@ -675,14 +755,24 @@ static void render_scene() {
                 tpos[1] = tv[0]*g_rotMat[1]+tv[1]*g_rotMat[5]+tv[2]*g_rotMat[9];
                 tpos[2] = tv[0]*g_rotMat[2]+tv[1]*g_rotMat[6]+tv[2]*g_rotMat[10];
                 if (theCamera->inViewVolume(tpos, 0.9f)) {
+                    int obj    = (int)latticeGrid[myMod(i)][myMod(j)][myMod(k)];
+                    int nverts = g_obj_vcount[obj];
+                    if (nverts == 0) continue;
+
                     glPushMatrix();
                     glTranslatef((float)i, (float)j, (float)k);
-                    glCallList(latticeGrid[myMod(i)][myMod(j)][myMod(k)]);
+                    glDrawArrays(GL_TRIANGLES, g_obj_start[obj], nverts);
                     glPopMatrix();
                 }
             }
         }
     }
+
+    fn_BindBuffer(GL_ARRAY_BUFFER, 0);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
 
     glDisable(GL_TEXTURE_GEN_S);
     glDisable(GL_TEXTURE_GEN_T);
@@ -823,11 +913,11 @@ static void initSaver() {
         initTextures();
     }
 
-    makeLatticeObjects();
+    buildLatticeVBOs();
     for (i = 0; i < LATSIZE; i++)
         for (j = 0; j < LATSIZE; j++)
             for (k = 0; k < LATSIZE; k++)
-                latticeGrid[i][j][k] = list_base + rsRandi(NUMOBJECTS);
+                latticeGrid[i][j][k] = (unsigned int)rsRandi(NUMOBJECTS);
 
     /* Border points */
     for (i = 0; i < 10; i++) for (j = 0; j < 6; j++) bPnt[i][j] = 0.0f;
@@ -916,7 +1006,7 @@ static void applyPreset(int idx) {
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
     glDeleteTextures(2, texture_id);
-    glDeleteLists(list_base, NUMOBJECTS);
+    fn_DeleteBuffers(1, &g_all_vbo);
 
     /* Rebuild for new preset */
     if (dTexture != 2 && dTexture != 6) glEnable(GL_DEPTH_TEST);
@@ -956,11 +1046,11 @@ static void applyPreset(int idx) {
         glFogf(GL_FOG_END,   (float)dDepth - 0.1f);
     }
     if (dTexture) { glEnable(GL_TEXTURE_2D); initTextures(); }
-    makeLatticeObjects();
+    buildLatticeVBOs();
     for (int i = 0; i < LATSIZE; i++)
         for (int j = 0; j < LATSIZE; j++)
             for (int k = 0; k < LATSIZE; k++)
-                latticeGrid[i][j][k] = list_base + rsRandi(NUMOBJECTS);
+                latticeGrid[i][j][k] = (unsigned int)rsRandi(NUMOBJECTS);
 
     g_drawDepth = dDepth + 2;
 
@@ -1145,21 +1235,59 @@ static int create_egl_surface() {
 static void frame_done(void *, struct wl_callback *, uint32_t);  /* forward */
 static const struct wl_callback_listener frame_listener = { frame_done };
 
+/* FPS telemetry — printed to stderr once per second */
+static struct {
+    struct timespec window_start;
+    int    frames;
+    int    phys_steps;
+    double frame_ms_sum;
+} g_perf;
+
+static void perf_init() {
+    clock_gettime(CLOCK_MONOTONIC, &g_perf.window_start);
+    g_perf.frames = g_perf.phys_steps = 0;
+    g_perf.frame_ms_sum = 0.0;
+}
+
 static void render_frame() {
     /* Accumulate real elapsed time, then step physics at a fixed 60 fps rate.
      * On a 120 Hz display we render twice as often but physics still advance
      * at the same pace as the original screensaver on a 60 Hz machine. */
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
     float real_dt = (float)g_wall_timer.tick();
     g_sim_accum += real_dt;
     if (g_sim_accum > 4.0f * SIM_DT)   /* cap: recover from pauses without lurching */
         g_sim_accum = 4.0f * SIM_DT;
+    int steps = 0;
     while (g_sim_accum >= SIM_DT) {
         frameTime = SIM_DT;
         update_physics();
         g_sim_accum -= SIM_DT;
+        ++steps;
     }
 
     render_scene();
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double frame_ms = ((t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9) * 1000.0;
+
+    g_perf.frames++;
+    g_perf.phys_steps  += steps;
+    g_perf.frame_ms_sum += frame_ms;
+
+    /* Report once per second */
+    double elapsed = (t1.tv_sec  - g_perf.window_start.tv_sec) +
+                     (t1.tv_nsec - g_perf.window_start.tv_nsec) * 1e-9;
+    if (elapsed >= 1.0) {
+        double fps     = g_perf.frames / elapsed;
+        double avg_ms  = g_perf.frame_ms_sum / g_perf.frames;
+        double steps_f = (double)g_perf.phys_steps / g_perf.frames;
+        fprintf(stderr, "FPS: %5.1f  frame: %5.2f ms  phys steps/frame: %.2f\n",
+                fps, avg_ms, steps_f);
+        perf_init();
+    }
 
     /* Attach next frame callback before swap so it is included in the commit */
     struct wl_callback *next = wl_surface_frame(g_surface);
@@ -1286,9 +1414,11 @@ int main(int argc, char *argv[]) {
     if (!create_egl_surface()) return 1;
 
     /* --- Initialize OpenGL state + screensaver --- */
+    load_vbo_fns();
     initSaver();
 
     /* --- Frame-callback render loop --- */
+    perf_init();
     g_wall_timer.tick();   /* prime: discard time elapsed during startup */
     render_frame();        /* first frame; attaches callback chain to compositor */
 
@@ -1297,6 +1427,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* --- Cleanup --- */
+    fn_DeleteBuffers(1, &g_all_vbo);
     delete theCamera;
     eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(g_egl_display, g_egl_surface);
