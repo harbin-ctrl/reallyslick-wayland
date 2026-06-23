@@ -561,7 +561,7 @@ static void draw() {
     static float flymodeChange = 20.0f;
     static int   seg          = 0;
     static float where        = 0.0f;
-    static float rollVel      = 0.0f, rollAcc = 0.0f;
+    static float rollVel      = 0.0f, rollAcc = 0.0f, rollAccTarget = 0.0f;
     static float rollChange   = 3.0f;
     static int   drawDepth    = dDepth + 2;
 
@@ -608,12 +608,18 @@ static void draw() {
 
     rollChange -= frameTime;
     if (rollChange <= 0.0f) {
-        rollAcc = rsRandf(0.02f*(float)dSpeed) - 0.01f*(float)dSpeed;
+        rollAccTarget = rsRandf(0.02f*(float)dSpeed) - 0.01f*(float)dSpeed;
         rollChange = rsRandf(10.0f) + 2.0f;
     }
+    /* Smooth rollAcc toward target (~0.3s time constant) so roll transitions curve in */
+    float t = frameTime * 3.0f; if (t > 1.0f) t = 1.0f;
+    rollAcc += (rollAccTarget - rollAcc) * t;
     rollVel += rollAcc * frameTime;
-    if (rollVel >  0.04f*(float)dSpeed && rollAcc > 0.0f) rollAcc = 0.0f;
-    if (rollVel < -0.04f*(float)dSpeed && rollAcc < 0.0f) rollAcc = 0.0f;
+    /* Friction: bleeds off excess roll so nothing accumulates indefinitely */
+    rollVel *= (1.0f - frameTime * 0.35f);
+    /* Soft cap: kill target acceleration when speed limit is exceeded */
+    if (rollVel >  0.04f*(float)dSpeed && rollAccTarget > 0.0f) rollAccTarget = 0.0f;
+    if (rollVel < -0.04f*(float)dSpeed && rollAccTarget < 0.0f) rollAccTarget = 0.0f;
     newQuat.make(rollVel * frameTime, oldDir[0], oldDir[1], oldDir[2]);
     quat.preMult(newQuat);
 
