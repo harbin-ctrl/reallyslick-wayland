@@ -10,7 +10,12 @@ LIBS     := $(shell pkg-config --libs wayland-client wayland-egl egl gl) -lGLU -
 TARGET  := lattice
 HEADERS := xdg-shell-client-protocol.h xdg-decoration-client-protocol.h
 
-.PHONY: all clean
+PREFIX  := /usr/local
+BINDIR  := $(PREFIX)/bin
+APPDIR  := $(PREFIX)/share/applications
+ICONDIR := $(PREFIX)/share/icons/hicolor
+
+.PHONY: all clean install uninstall
 
 all: $(TARGET)
 
@@ -34,6 +39,23 @@ xdg-decoration-client-protocol.h: $(XDG_DECO_XML)
 
 xdg-decoration-protocol.c: $(XDG_DECO_XML)
 	wayland-scanner private-code < $< > $@
+
+install: $(TARGET)
+	install -Dm755 $(TARGET)        $(DESTDIR)$(BINDIR)/$(TARGET)
+	install -Dm644 lattice.desktop  $(DESTDIR)$(APPDIR)/lattice.desktop
+	for sz in 16 32 48 64 128 256; do \
+		install -Dm644 lattice-icon-$${sz}.png \
+			$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
+	done
+	-gtk-update-icon-cache -f -t $(DESTDIR)$(ICONDIR) 2>/dev/null || true
+	-update-desktop-database $(DESTDIR)$(APPDIR) 2>/dev/null || true
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f $(DESTDIR)$(APPDIR)/lattice.desktop
+	for sz in 16 32 48 64 128 256; do \
+		rm -f $(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
+	done
 
 clean:
 	rm -f $(TARGET) xdg-shell-client-protocol.h xdg-shell-protocol.c \

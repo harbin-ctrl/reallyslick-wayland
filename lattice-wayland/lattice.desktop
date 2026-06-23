@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Lattice
+GenericName=Lattice Screensaver
+Comment=Fly through an infinite lattice of brass rings (Really Slick Screensavers port)
+Exec=lattice
+Icon=lattice
+Terminal=false
+Categories=DesktopToys;
+Keywords=screensaver;opengl;wayland;3d;
