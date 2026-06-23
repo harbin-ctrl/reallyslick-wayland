@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-Raytrace an icon for lattice-wayland.
-Renders interlocking brass tori viewed from inside the lattice,
-matching the brassmesh preset's GL_SPHERE_MAP shading style.
+Raytrace lattice-wayland icon.
+Two interlocking brass tori, 3/4 view, RGBA with transparent background.
 """
 import numpy as np
 from PIL import Image, ImageFilter
 
-SIZE = 256
+SIZE = 512   # render high-res, downsample for quality
 
-# ── Camera ────────────────────────────────────────────────────────────────────
-eye    = np.array([0.18, 0.28, 1.8],  dtype=np.float64)
-target = np.array([0.0,  0.05, -3.0], dtype=np.float64)
-fov_h  = 0.68   # half-angle radians (~39°)
+# ── Camera: 3/4 view so both ring orientations clearly read as rings ──────────
+eye    = np.array([1.5, 1.1, 2.0], dtype=np.float64)
+target = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+fov_h  = 0.52   # ~30° half-angle keeps rings large in frame
 
 fwd = target - eye;  fwd /= np.linalg.norm(fwd)
 rgt = np.cross(fwd, [0, 1, 0]); rgt /= np.linalg.norm(rgt)
@@ -38,24 +37,13 @@ def sdf_torus(p, R, r):
     d_xy = np.sqrt(p[...,0]**2 + p[...,1]**2) - R
     return np.sqrt(d_xy**2 + p[...,2]**2) - r
 
-# ── Scene ─────────────────────────────────────────────────────────────────────
-# Three pairs: (horizontal, vertical) at increasing depth.
-# Vertical rings are rotated 90° around X; slight positional offsets add realism.
-R  = 0.70   # major radius
-r  = 0.155  # tube radius
+# ── Scene: two interlocking rings (same centre, perpendicular planes) ─────────
+R = 0.72   # major radius
+r = 0.18   # tube radius
 
 tori = [
-    # near pair  ─ large, fills the frame
-    ([ 0.0,  0.0,  0.0 ], np.eye(3),      R, r),   # horizontal
-    ([ 0.0,  0.0, -0.05], rotx(np.pi/2),  R, r),   # vertical
-
-    # mid pair
-    ([ 0.05, 0.0, -2.0 ], np.eye(3),      R, r),
-    ([ 0.0,  0.05,-2.05], rotx(np.pi/2),  R, r),
-
-    # far pair  ─ nearly swallowed by fog
-    ([-0.05, 0.0, -4.0 ], np.eye(3),      R, r),
-    ([ 0.0, -0.05,-4.05], rotx(np.pi/2),  R, r),
+    ([0.0, 0.0, 0.0], np.eye(3),      R, r),   # horizontal (XY plane)
+    ([0.0, 0.0, 0.0], rotx(np.pi/2),  R, r),   # vertical   (XZ plane)
 ]
 
 def scene_sdf(p):
@@ -66,22 +54,22 @@ def scene_sdf(p):
     return d
 
 # ── Ray march ─────────────────────────────────────────────────────────────────
-pos0 = np.broadcast_to(eye, (SIZE, SIZE, 3)).copy()
-t    = np.zeros((SIZE, SIZE))
-hit  = np.zeros((SIZE, SIZE), bool)
+pos0  = np.broadcast_to(eye, (SIZE, SIZE, 3)).copy()
+t     = np.zeros((SIZE, SIZE))
+hit   = np.zeros((SIZE, SIZE), bool)
+min_d = np.full((SIZE, SIZE), 1e9)   # track nearest approach for AA
 
-for _ in range(96):
+for _ in range(120):
     p = pos0 + t[:,:,None] * rays
     d = scene_sdf(p)
-    active = ~hit & (t < 10.0) & (d > 4e-4)
+    min_d = np.minimum(min_d, d)
+    active = ~hit & (t < 8.0) & (d > 3e-4)
     t   = np.where(active, t + np.abs(d), t)
-    hit |= (d < 4e-4) & (t < 10.0)
+    hit |= (d < 3e-4) & (t < 8.0)
 
-# ── Normals (central differences) ─────────────────────────────────────────────
+# ── Normals ───────────────────────────────────────────────────────────────────
 hp = pos0 + t[:,:,None] * rays
 e  = 4e-4
-for ax in range(3):
-    pass  # just silence lint; computed below
 ep = [np.zeros_like(hp) for _ in range(3)]
 for ax in range(3): ep[ax][..., ax] = e
 nx = scene_sdf(hp + ep[0]) - scene_sdf(hp - ep[0])
@@ -90,19 +78,17 @@ nz = scene_sdf(hp + ep[2]) - scene_sdf(hp - ep[2])
 nrm = np.stack([nx, ny, nz], axis=2)
 nrm /= np.linalg.norm(nrm, axis=2, keepdims=True).clip(1e-8)
 
-# ── Brass shading via sphere-map simulation ───────────────────────────────────
-# Project normal into eye space → sphere-map (u,v)
+# ── Brass shading (sphere-map simulation) ────────────────────────────────────
 ne_x = np.einsum('ijk,k->ij', nrm, rgt)
 ne_y = np.einsum('ijk,k->ij', nrm, cup)
 
-sv = (ne_y + 1.0) * 0.5   # 0..1 vertical sphere-map coord
-su = (ne_x + 1.0) * 0.5   # 0..1 horizontal
+sv = (ne_y + 1.0) * 0.5
+su = (ne_x + 1.0) * 0.5
 
-# Brass colour palette (dark amber → gold → bright highlight)
-dark_  = np.array([0.20, 0.09, 0.01])
-amber_ = np.array([0.62, 0.38, 0.04])
-gold_  = np.array([1.00, 0.77, 0.10])
-shine_ = np.array([1.00, 0.97, 0.84])
+dark_  = np.array([0.30, 0.14, 0.02])
+amber_ = np.array([0.72, 0.46, 0.05])
+gold_  = np.array([1.00, 0.80, 0.12])
+shine_ = np.array([1.00, 0.97, 0.85])
 
 v3 = np.clip(sv, 0, 1)[..., None]
 col = np.where(v3 < 0.25,
@@ -113,46 +99,49 @@ col = np.where(v3 < 0.25,
         gold_  + (shine_ - gold_)  * ((v3 - 0.60) / 0.25),
         shine_)))
 
-# Horizontal modulation from su (side highlights + shadows)
-col *= 0.78 + 0.22 * np.cos((np.clip(su, 0, 1)[..., None] - 0.5) * np.pi)
+# Horizontal sphere-map modulation
+col *= 0.80 + 0.20 * np.cos((np.clip(su,0,1)[...,None] - 0.5) * np.pi)
 
-# Slight specular pop at the very top of the sphere map
-spec = np.clip((sv - 0.80) / 0.18, 0, 1)[..., None]
-col  = col + spec * np.array([0.55, 0.50, 0.38])
+# Tight specular highlight
+spec = np.clip((sv - 0.82) / 0.16, 0, 1)[..., None]
+col += spec * np.array([0.45, 0.42, 0.32])
 
-# Fog: blend to black over depth
-bg_col  = np.array([0.016, 0.007, 0.001])
-fog_fac = np.clip((t - 1.2) / 6.5, 0, 1)[..., None]
-col     = col * (1.0 - fog_fac) + bg_col * fog_fac
+col = np.clip(col, 0, 1)
 
-# ── Background ────────────────────────────────────────────────────────────────
-ix = np.linspace(-1, 1, SIZE);  iy = np.linspace(-1, 1, SIZE)
-xg, yg = np.meshgrid(ix, iy)
-# Warm amber centre glow (suggests the lit lattice interior in the distance)
-glow = np.exp(-(xg**2 + yg**2) * 3.5) * 0.055
-bgc  = bg_col + np.stack([glow * 1.0, glow * 0.45, glow * 0.06], axis=2)
+# ── Alpha: opaque on hit, smooth anti-aliased edge, transparent elsewhere ─────
+# SDF edge distance → smooth alpha at silhouette
+edge_width = 0.025
+alpha = np.where(hit, 1.0, np.clip(1.0 - min_d / edge_width, 0.0, 1.0))
 
-# ── Composite ─────────────────────────────────────────────────────────────────
-out = np.where(hit[:,:,None], np.clip(col, 0, 1), bgc)
+# ── Composite RGBA ────────────────────────────────────────────────────────────
+# Gamma encode
+col_g = np.power(np.clip(col, 1e-10, 1), 1.0 / 2.2)
 
-# Gamma encode (linear → sRGB)
-out = np.power(np.clip(out, 1e-10, 1), 1.0 / 2.2)
+# For edge pixels: blend colour from nearest-ring colour (already computed)
+rgb = (col_g * 255).astype(np.uint8)
+a   = (alpha * 255).astype(np.uint8)
 
-arr = (out * 255).astype(np.uint8)
-img = Image.fromarray(arr, 'RGB')
+img = Image.fromarray(
+    np.dstack([rgb, a]), 'RGBA'
+)
 
-# Subtle bloom: extract bright pixels and add a soft halo
-bright = np.clip((out - 0.55) * 2.5, 0, 1)
-b_img  = Image.fromarray((bright * 255).astype(np.uint8), 'RGB')
-b_blur = b_img.filter(ImageFilter.GaussianBlur(radius=4))
-b_arr  = np.array(b_blur).astype(np.float32) / 255.0
-final  = np.clip(arr.astype(np.float32)/255.0 + b_arr * 0.28, 0, 1)
-img    = Image.fromarray((final * 255).astype(np.uint8), 'RGB')
+# Very subtle inner glow (bloom only on the rings themselves, not into background)
+glow_arr = np.array(img).astype(np.float32) / 255.0
+bright   = np.clip((glow_arr[..., :3] - 0.60) * 2.5, 0, 1)
+b_img    = Image.fromarray((bright * 255).astype(np.uint8), 'RGB')
+b_blur   = np.array(b_img.filter(ImageFilter.GaussianBlur(radius=6))).astype(np.float32)/255
+# Apply bloom only where ring is opaque
+a_mask   = glow_arr[..., 3:4]
+bloomed  = np.clip(glow_arr[..., :3] + b_blur * 0.20 * a_mask, 0, 1)
 
-img.save('$HOME/lattice/lattice-icon-256.png')
-print("Saved lattice-icon-256.png")
+final_rgb = (np.power(bloomed, 1.0) * 255).astype(np.uint8)
+final_a   = (glow_arr[..., 3] * 255).astype(np.uint8)
+img = Image.fromarray(np.dstack([final_rgb, final_a]), 'RGBA')
 
-# Downsample to common icon sizes
-for sz in (128, 64, 48, 32, 16):
+# ── Save at multiple sizes ────────────────────────────────────────────────────
+img.save('$HOME/lattice/lattice-icon-512.png')
+print("Saved lattice-icon-512.png")
+
+for sz in (256, 128, 64, 48, 32, 16):
     img.resize((sz, sz), Image.LANCZOS).save(f'$HOME/lattice/lattice-icon-{sz}.png')
     print(f"Saved lattice-icon-{sz}.png")

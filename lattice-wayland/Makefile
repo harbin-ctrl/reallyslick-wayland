@@ -43,7 +43,7 @@ xdg-decoration-protocol.c: $(XDG_DECO_XML)
 install: $(TARGET)
 	install -Dm755 $(TARGET)        $(DESTDIR)$(BINDIR)/$(TARGET)
 	install -Dm644 lattice.desktop  $(DESTDIR)$(APPDIR)/lattice.desktop
-	for sz in 16 32 48 64 128 256; do \
+	for sz in 16 32 48 64 128 256 512; do \
 		install -Dm644 lattice-icon-$${sz}.png \
 			$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
 	done
@@ -53,7 +53,7 @@ install: $(TARGET)
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
 	rm -f $(DESTDIR)$(APPDIR)/lattice.desktop
-	for sz in 16 32 48 64 128 256; do \
+	for sz in 16 32 48 64 128 256 512; do \
 		rm -f $(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
 	done
 
