@@ -35,7 +35,6 @@
 #include <cmath>
 #include <ctime>
 #include <unistd.h>
-#include <poll.h>
 #include <time.h>
 
 #include <wayland-client.h>
@@ -262,6 +261,26 @@ static int   globalxyz[3];
 static int   lastBorder;
 static int   segments;
 static camera *theCamera = NULL;
+
+/* -------------------------------------------------------------------------
+ * Physics simulation state
+ * Lifted from draw() statics so update_physics / render_scene can share them.
+ * ---------------------------------------------------------------------- */
+static rsVec  g_xyz, g_oldxyz, g_oldDir, g_oldAngvel;
+static float  g_rotMat[16];
+static rsQuat g_quat;
+static int    g_flymode = 1, g_seg = 0;
+static float  g_where = 0.0f, g_flymodeChange = 20.0f;
+static float  g_rollVel = 0.0f, g_rollAcc = 0.0f;
+static float  g_rollChange = 0.0f;  /* set in initSaver() */
+static int    g_drawDepth  = 0;     /* set in initSaver() */
+
+/* Physics run at exactly 60 fps worth of time per real second, regardless of
+ * display refresh rate.  The wall-clock timer drives a fixed-step accumulator;
+ * render_scene() then draws whatever state the physics last produced. */
+static const float SIM_DT      = 1.0f / 60.0f;
+static float       g_sim_accum = 0.0f;
+static rsTimer     g_wall_timer;
 
 /* -------------------------------------------------------------------------
  * Wayland + EGL state
@@ -529,8 +548,8 @@ static void setupProjection(int w, int h) {
     float mat[16];
     float f = cosf((float)dFov * 0.5f * D2R) / sinf((float)dFov * 0.5f * D2R);
     memset(mat, 0, sizeof(mat));
-    mat[0]  = f;
-    mat[5]  = f * ((float)w / (float)h);
+    mat[0]  = f / aspectRatio;   /* dFov is vertical FOV; horizontal widens with aspect ratio */
+    mat[5]  = f;
     mat[10] = -1.0f - 0.02f / (float)dDepth;
     mat[11] = -1.0f;
     mat[14] = -(0.02f + 0.0002f / (float)dDepth);
@@ -547,37 +566,25 @@ static void setupProjection(int w, int h) {
 }
 
 /* -------------------------------------------------------------------------
- * Per-frame render
+ * Physics update  (always called with frameTime == SIM_DT)
  * ---------------------------------------------------------------------- */
 
-static void draw() {
+static void update_physics() {
     rsVec xyz, dir, angvel, tempVec;
-    static rsVec oldxyz(0.0f, 0.0f, 0.0f);
-    static rsVec oldDir(0.0f, 0.0f, -1.0f);
-    static rsVec oldAngvel(0.0f, 0.0f, 0.0f);
-    float rotMat[16];
     rsQuat newQuat;
-    static rsQuat quat;
-    static int   flymode      = 1;
-    static float flymodeChange = 20.0f;
-    static int   seg          = 0;
-    static float where        = 0.0f;
-    static float rollVel      = 0.0f, rollAcc = 0.0f, rollAccTarget = 0.0f;
-    static float rollChange   = 3.0f;
-    static int   drawDepth    = dDepth + 2;
 
-    where += (float)dSpeed * 0.05f * frameTime;
-    if (where >= 1.0f) { where -= 1.0f; seg++; }
-    if (seg >= segments) { seg = 0; reconfigure(); }
+    g_where += (float)dSpeed * 0.05f * frameTime;
+    if (g_where >= 1.0f) { g_where -= 1.0f; g_seg++; }
+    if (g_seg >= segments) { g_seg = 0; reconfigure(); }
 
-    xyz[0] = interpolate(path[seg][0], path[seg][3], path[seg+1][0], path[seg+1][3], where);
-    xyz[1] = interpolate(path[seg][1], path[seg][4], path[seg+1][1], path[seg+1][4], where);
-    xyz[2] = interpolate(path[seg][2], path[seg][5], path[seg+1][2], path[seg+1][5], where);
+    xyz[0] = interpolate(path[g_seg][0], path[g_seg][3], path[g_seg+1][0], path[g_seg+1][3], g_where);
+    xyz[1] = interpolate(path[g_seg][1], path[g_seg][4], path[g_seg+1][1], path[g_seg+1][4], g_where);
+    xyz[2] = interpolate(path[g_seg][2], path[g_seg][5], path[g_seg+1][2], path[g_seg+1][5], g_where);
 
-    dir = xyz - oldxyz;
+    dir = xyz - g_oldxyz;
     dir.normalize();
-    angvel.cross(dir, oldDir);
-    float dot = oldDir.dot(dir);
+    angvel.cross(dir, g_oldDir);
+    float dot = g_oldDir.dot(dir);
     if (dot < -1.0f) dot = -1.0f;
     if (dot >  1.0f) dot =  1.0f;
     float angle = acosf(dot);
@@ -586,61 +593,67 @@ static void draw() {
     if (angle < -maxSpin) angle = -maxSpin;
     angvel.scale(angle);
 
-    tempVec = angvel - oldAngvel;
+    tempVec = angvel - g_oldAngvel;
     float dist = tempVec.length();
     const float rotInertia = 0.007f * (float)dSpeed * frameTime;
     if (dist > rotInertia) {
         tempVec.scale(rotInertia / dist);
-        angvel = oldAngvel + tempVec;
+        angvel = g_oldAngvel + tempVec;
     }
 
-    flymodeChange -= frameTime;
-    if (flymodeChange <= 1.0f) angvel.scale(flymodeChange);
-    if (flymodeChange <= 0.0f) {
-        flymode = rsRandi(4);
-        flymodeChange = rsRandf((float)(150 - dSpeed)) + 5.0f;
+    g_flymodeChange -= frameTime;
+    if (g_flymodeChange <= 1.0f) angvel.scale(g_flymodeChange);
+    if (g_flymodeChange <= 0.0f) {
+        g_flymode = rsRandi(4);
+        g_flymodeChange = rsRandf((float)(150 - dSpeed)) + 5.0f;
     }
 
     tempVec = angvel;
     angle = tempVec.normalize();
     newQuat.make(angle, tempVec[0], tempVec[1], tempVec[2]);
-    if (flymode) quat.preMult(newQuat);
-    else         quat.postMult(newQuat);
+    if (g_flymode) g_quat.preMult(newQuat);
+    else           g_quat.postMult(newQuat);
 
-    rollChange -= frameTime;
-    if (rollChange <= 0.0f) {
-        rollAccTarget = rsRandf(0.02f*(float)dSpeed) - 0.01f*(float)dSpeed;
-        rollChange = rsRandf(10.0f) + 2.0f;
+    /* Roll — direct assignment matches original; cap reduced ~37% to compensate
+     * for the wider FOV making angular motion appear proportionally faster.
+     * Acceleration is scaled to keep the same ~4-second ramp time as original. */
+    const float rollCap = 0.025f * (float)dSpeed;  /* ← tune to adjust max roll speed */
+    g_rollChange -= frameTime;
+    if (g_rollChange <= 0.0f) {
+        g_rollAcc    = rsRandf(0.5f * rollCap) - 0.25f * rollCap;  /* ~4s to cap at max */
+        g_rollChange = rsRandf(10.0f) + 2.0f;
     }
-    /* Smooth rollAcc toward target (~0.3s time constant) so roll transitions curve in */
-    float t = frameTime * 3.0f; if (t > 1.0f) t = 1.0f;
-    rollAcc += (rollAccTarget - rollAcc) * t;
-    rollVel += rollAcc * frameTime;
-    /* Friction: bleeds off excess roll so nothing accumulates indefinitely */
-    rollVel *= (1.0f - frameTime * 0.35f);
-    /* Soft cap: kill target acceleration when speed limit is exceeded */
-    if (rollVel >  0.04f*(float)dSpeed && rollAccTarget > 0.0f) rollAccTarget = 0.0f;
-    if (rollVel < -0.04f*(float)dSpeed && rollAccTarget < 0.0f) rollAccTarget = 0.0f;
-    newQuat.make(rollVel * frameTime, oldDir[0], oldDir[1], oldDir[2]);
-    quat.preMult(newQuat);
+    g_rollVel += g_rollAcc * frameTime;
+    g_rollVel *= (1.0f - frameTime * 0.35f);  /* friction keeps roll from persisting forever */
+    if (g_rollVel >  rollCap && g_rollAcc > 0.0f) g_rollAcc = 0.0f;  /* hard stop, original behaviour */
+    if (g_rollVel < -rollCap && g_rollAcc < 0.0f) g_rollAcc = 0.0f;
+    newQuat.make(g_rollVel * frameTime, g_oldDir[0], g_oldDir[1], g_oldDir[2]);
+    g_quat.preMult(newQuat);
 
-    quat.toMat(rotMat);
+    g_quat.toMat(g_rotMat);
 
-    oldxyz = xyz;
-    oldDir[0] = -rotMat[2];
-    oldDir[1] = -rotMat[6];
-    oldDir[2] = -rotMat[10];
-    angvel.scale(1.0f - frameTime * 0.1f);  /* gradual backoff prevents long-term spin accumulation */
-    oldAngvel = angvel;
+    g_oldxyz = xyz;
+    g_oldDir[0] = -g_rotMat[2];
+    g_oldDir[1] = -g_rotMat[6];
+    g_oldDir[2] = -g_rotMat[10];
+    angvel.scale(1.0f - frameTime * 0.1f);
+    g_oldAngvel = angvel;
 
+    g_xyz = xyz;
+}
+
+/* -------------------------------------------------------------------------
+ * Scene render  (uses whatever state update_physics last wrote)
+ * ---------------------------------------------------------------------- */
+
+static void render_scene() {
     glMatrixMode(GL_MODELVIEW);
-    glLoadMatrixf(rotMat);
-    glTranslatef(-xyz[0], -xyz[1], -xyz[2]);
+    glLoadMatrixf(g_rotMat);
+    glTranslatef(-g_xyz[0], -g_xyz[1], -g_xyz[2]);
 
     glColor3f(1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    /* Sphere-map env mapping: crystal, chrome, brass, shiny, ghostly */
     if (dTexture == 2 || dTexture == 3 || dTexture == 4 ||
         dTexture == 5 || dTexture == 6) {
         glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
@@ -650,16 +663,17 @@ static void draw() {
     }
 
     int i, j, k;
-    for (i = globalxyz[0]-drawDepth; i <= globalxyz[0]+drawDepth; i++) {
-        for (j = globalxyz[1]-drawDepth; j <= globalxyz[1]+drawDepth; j++) {
-            for (k = globalxyz[2]-drawDepth; k <= globalxyz[2]+drawDepth; k++) {
-                tempVec[0] = (float)i - xyz[0];
-                tempVec[1] = (float)j - xyz[1];
-                tempVec[2] = (float)k - xyz[2];
+    for (i = globalxyz[0]-g_drawDepth; i <= globalxyz[0]+g_drawDepth; i++) {
+        for (j = globalxyz[1]-g_drawDepth; j <= globalxyz[1]+g_drawDepth; j++) {
+            for (k = globalxyz[2]-g_drawDepth; k <= globalxyz[2]+g_drawDepth; k++) {
+                rsVec tv;
+                tv[0] = (float)i - g_xyz[0];
+                tv[1] = (float)j - g_xyz[1];
+                tv[2] = (float)k - g_xyz[2];
                 float tpos[3];
-                tpos[0] = tempVec[0]*rotMat[0]+tempVec[1]*rotMat[4]+tempVec[2]*rotMat[8];
-                tpos[1] = tempVec[0]*rotMat[1]+tempVec[1]*rotMat[5]+tempVec[2]*rotMat[9];
-                tpos[2] = tempVec[0]*rotMat[2]+tempVec[1]*rotMat[6]+tempVec[2]*rotMat[10];
+                tpos[0] = tv[0]*g_rotMat[0]+tv[1]*g_rotMat[4]+tv[2]*g_rotMat[8];
+                tpos[1] = tv[0]*g_rotMat[1]+tv[1]*g_rotMat[5]+tv[2]*g_rotMat[9];
+                tpos[2] = tv[0]*g_rotMat[2]+tv[1]*g_rotMat[6]+tv[2]*g_rotMat[10];
                 if (theCamera->inViewVolume(tpos, 0.9f)) {
                     glPushMatrix();
                     glTranslatef((float)i, (float)j, (float)k);
@@ -838,6 +852,11 @@ static void initSaver() {
     if (j > 5) { i = k/2; path[1][i]*=-1.0f; path[1][i+3]*=-1.0f; }
     lastBorder = k;
     segments = 1;
+
+    /* Physics state init */
+    g_oldDir     = rsVec(0.0f, 0.0f, -1.0f);
+    g_rollChange = rsRandf(10.0f) + 2.0f;   /* random 2-12s before first roll, matches original */
+    g_drawDepth  = dDepth + 2;
 }
 
 /* -------------------------------------------------------------------------
@@ -942,6 +961,8 @@ static void applyPreset(int idx) {
         for (int j = 0; j < LATSIZE; j++)
             for (int k = 0; k < LATSIZE; k++)
                 latticeGrid[i][j][k] = list_base + rsRandi(NUMOBJECTS);
+
+    g_drawDepth = dDepth + 2;
 
     char title[128];
     snprintf(title, sizeof(title), "Lattice — %s  (← → to cycle)", dPresetName);
@@ -1104,13 +1125,62 @@ static int create_egl_surface() {
         fprintf(stderr, "lattice: eglMakeCurrent failed\n");
         return 0;
     }
-    eglSwapInterval(g_egl_display, 1);
+    eglSwapInterval(g_egl_display, 0);  /* frame callbacks own timing; no EGL blocking needed */
     return 1;
 }
 
 /* -------------------------------------------------------------------------
  * Main
  * ---------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------
+ * Frame-callback-driven render loop (Wayland convention)
+ *
+ * render_frame() runs the physics accumulator then draws.  It registers the
+ * next wl_surface_frame callback before eglSwapBuffers so the compositor
+ * fires frame_done exactly once per presented frame.  The main loop is just
+ * wl_display_dispatch() — no busy-polling, no Sleep, no manual vsync wait.
+ * ---------------------------------------------------------------------- */
+
+static void frame_done(void *, struct wl_callback *, uint32_t);  /* forward */
+static const struct wl_callback_listener frame_listener = { frame_done };
+
+static void render_frame() {
+    /* Accumulate real elapsed time, then step physics at a fixed 60 fps rate.
+     * On a 120 Hz display we render twice as often but physics still advance
+     * at the same pace as the original screensaver on a 60 Hz machine. */
+    float real_dt = (float)g_wall_timer.tick();
+    g_sim_accum += real_dt;
+    if (g_sim_accum > 4.0f * SIM_DT)   /* cap: recover from pauses without lurching */
+        g_sim_accum = 4.0f * SIM_DT;
+    while (g_sim_accum >= SIM_DT) {
+        frameTime = SIM_DT;
+        update_physics();
+        g_sim_accum -= SIM_DT;
+    }
+
+    render_scene();
+
+    /* Attach next frame callback before swap so it is included in the commit */
+    struct wl_callback *next = wl_surface_frame(g_surface);
+    wl_callback_add_listener(next, &frame_listener, NULL);
+    eglSwapBuffers(g_egl_display, g_egl_surface);
+}
+
+static void frame_done(void *, struct wl_callback *cb, uint32_t) {
+    wl_callback_destroy(cb);
+    if (!g_running) return;
+
+    if (g_needs_resize) {
+        wl_egl_window_resize(g_egl_window, g_new_width, g_new_height, 0, 0);
+        g_win_width  = g_new_width;
+        g_win_height = g_new_height;
+        g_needs_resize = 0;
+        setupProjection(g_win_width, g_win_height);
+    }
+
+    render_frame();
+}
 
 int main(int argc, char *argv[]) {
     /* Apply preset first, then allow per-parameter overrides */
@@ -1218,37 +1288,12 @@ int main(int argc, char *argv[]) {
     /* --- Initialize OpenGL state + screensaver --- */
     initSaver();
 
-    /* --- Render loop --- */
-    rsTimer timer;
-    int wl_fd = wl_display_get_fd(g_display);
+    /* --- Frame-callback render loop --- */
+    g_wall_timer.tick();   /* prime: discard time elapsed during startup */
+    render_frame();        /* first frame; attaches callback chain to compositor */
 
     while (g_running) {
-        /* Dispatch pending Wayland events without blocking */
-        while (wl_display_prepare_read(g_display) != 0)
-            wl_display_dispatch_pending(g_display);
-        wl_display_flush(g_display);
-
-        struct pollfd pfd = { wl_fd, POLLIN, 0 };
-        if (poll(&pfd, 1, 0) > 0)
-            wl_display_read_events(g_display);
-        else
-            wl_display_cancel_read(g_display);
-        wl_display_dispatch_pending(g_display);
-
-        /* Handle resize */
-        if (g_needs_resize) {
-            wl_egl_window_resize(g_egl_window, g_new_width, g_new_height, 0, 0);
-            g_win_width  = g_new_width;
-            g_win_height = g_new_height;
-            g_needs_resize = 0;
-            setupProjection(g_win_width, g_win_height);
-        }
-
-        frameTime = (float)timer.tick();
-        if (frameTime > 0.1f) frameTime = 0.1f;   /* cap at 100 ms */
-
-        draw();
-        eglSwapBuffers(g_egl_display, g_egl_surface);
+        if (wl_display_dispatch(g_display) < 0) break;
     }
 
     /* --- Cleanup --- */
