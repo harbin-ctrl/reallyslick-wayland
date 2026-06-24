@@ -325,11 +325,21 @@ public:
         cullVec[3][0]=-cullVec[2][0]; cullVec[3][1]=0.0f; cullVec[3][2]=cullVec[2][2];
     }
 
-    bool inViewVolume(float* pos, float radius) {
-        if (pos[2] < -(farplane+radius)) return false;
-        for (int i = 0; i < 4; i++)
-            if (pos[0]*cullVec[i][0]+pos[1]*cullVec[i][1]+pos[2]*cullVec[i][2] < -radius)
-                return false;
+    bool inViewVolume(const float pos[3], float radius) {
+        if (pos[2] < -(farplane + radius)) return false;
+        
+        // Plane 0 & 1 (y-axis culling, x-component is 0.0f)
+        float y_term = pos[1] * cullVec[0][1];
+        float z_term_01 = pos[2] * cullVec[0][2];
+        if (y_term + z_term_01 < -radius) return false;
+        if (-y_term + z_term_01 < -radius) return false;
+        
+        // Plane 2 & 3 (x-axis culling, y-component is 0.0f)
+        float x_term = pos[0] * cullVec[2][0];
+        float z_term_23 = pos[2] * cullVec[2][2];
+        if (x_term + z_term_23 < -radius) return false;
+        if (-x_term + z_term_23 < -radius) return false;
+        
         return true;
     }
 };
@@ -1023,21 +1033,46 @@ static void render_scene() {
     struct CellRef { short i, j, k, t; };
     static CellRef vis[16000];
     int nvis = 0;
+
+    float tv0 = (float)(globalxyz[0] - g_drawDepth) - g_xyz[0];
+    int mod_i = myMod(globalxyz[0] - g_drawDepth);
     for (int i = globalxyz[0]-g_drawDepth; i <= globalxyz[0]+g_drawDepth; i++) {
+        float part_i_0 = tv0 * g_rotMat[0];
+        float part_i_1 = tv0 * g_rotMat[1];
+        float part_i_2 = tv0 * g_rotMat[2];
+
+        float tv1 = (float)(globalxyz[1] - g_drawDepth) - g_xyz[1];
+        int mod_j = myMod(globalxyz[1] - g_drawDepth);
         for (int j = globalxyz[1]-g_drawDepth; j <= globalxyz[1]+g_drawDepth; j++) {
+            float part_j_0 = part_i_0 + tv1 * g_rotMat[4];
+            float part_j_1 = part_i_1 + tv1 * g_rotMat[5];
+            float part_j_2 = part_i_2 + tv1 * g_rotMat[6];
+
+            float tv2 = (float)(globalxyz[2] - g_drawDepth) - g_xyz[2];
+            int mod_k = myMod(globalxyz[2] - g_drawDepth);
             for (int k = globalxyz[2]-g_drawDepth; k <= globalxyz[2]+g_drawDepth; k++) {
-                float tv0 = (float)i-g_xyz[0], tv1 = (float)j-g_xyz[1], tv2 = (float)k-g_xyz[2];
                 float ep[3] = {
-                    tv0*g_rotMat[0]+tv1*g_rotMat[4]+tv2*g_rotMat[8],
-                    tv0*g_rotMat[1]+tv1*g_rotMat[5]+tv2*g_rotMat[9],
-                    tv0*g_rotMat[2]+tv1*g_rotMat[6]+tv2*g_rotMat[10],
+                    part_j_0 + tv2 * g_rotMat[8],
+                    part_j_1 + tv2 * g_rotMat[9],
+                    part_j_2 + tv2 * g_rotMat[10]
                 };
-                if (!theCamera->inViewVolume(ep, 0.9f)) continue;
-                int t = (int)latticeGrid[myMod(i)][myMod(j)][myMod(k)];
-                if (g_obj_vcount[t] == 0 || nvis >= 16000) continue;
-                vis[nvis++] = {(short)i,(short)j,(short)k,(short)t};
+                if (theCamera->inViewVolume(ep, 0.9f)) {
+                    int t = (int)latticeGrid[mod_i][mod_j][mod_k];
+                    if (g_obj_vcount[t] > 0 && nvis < 16000) {
+                        vis[nvis++] = {(short)i,(short)j,(short)k,(short)t};
+                    }
+                }
+                tv2 += 1.0f;
+                mod_k++;
+                if (mod_k >= LATSIZE) mod_k = 0;
             }
+            tv1 += 1.0f;
+            mod_j++;
+            if (mod_j >= LATSIZE) mod_j = 0;
         }
+        tv0 += 1.0f;
+        mod_i++;
+        if (mod_i >= LATSIZE) mod_i = 0;
     }
     if (nvis == 0) return;
 
@@ -1050,19 +1085,19 @@ static void render_scene() {
     for (int t = 0; t < NUMOBJECTS; t++) type_start[t+1] = type_start[t] + type_cnt[t];
     int total = type_start[NUMOBJECTS];
 
-    static float inst_data[16000][3];
+    static short inst_data[16000][3];
     int fill[NUMOBJECTS] = {};
     for (int v = 0; v < nvis; v++) {
         int t   = vis[v].t;
         int idx = type_start[t] + fill[t]++;
-        inst_data[idx][0] = (float)vis[v].i;
-        inst_data[idx][1] = (float)vis[v].j;
-        inst_data[idx][2] = (float)vis[v].k;
+        inst_data[idx][0] = vis[v].i;
+        inst_data[idx][1] = vis[v].j;
+        inst_data[idx][2] = vis[v].k;
     }
 
     /* --- Upload instance translations and set up vertex attributes */
     fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
-    fn_BufferData(GL_ARRAY_BUFFER, total * 12, inst_data, GL_DYNAMIC_DRAW);
+    fn_BufferData(GL_ARRAY_BUFFER, total * sizeof(short) * 3, inst_data, GL_DYNAMIC_DRAW);
 
     /* Geometry attributes (attribs 0-3) from the static object VBO */
     fn_BindBuffer(GL_ARRAY_BUFFER, g_all_vbo);
@@ -1091,8 +1126,8 @@ static void render_scene() {
     for (int t = 0; t < NUMOBJECTS; t++) {
         if (type_cnt[t] == 0 || g_obj_icount[t] == 0) continue;
         fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
-        fn_VertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 12,
-                               (const void *)(ptrdiff_t)(type_start[t] * 12));
+        fn_VertexAttribPointer(4, 3, GL_SHORT, GL_FALSE, sizeof(short) * 3,
+                               (const void *)(ptrdiff_t)(type_start[t] * sizeof(short) * 3));
         fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t], GL_UNSIGNED_INT,
                                  (const void *)(ptrdiff_t)(g_obj_istart[t] * (int)sizeof(unsigned int)),
                                  type_cnt[t]);
