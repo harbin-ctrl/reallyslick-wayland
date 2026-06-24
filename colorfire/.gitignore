@@ -1,0 +1,7 @@
+colorfire
+*.o
+xdg-shell-client-protocol.h
+xdg-shell-protocol.c
+xdg-decoration-client-protocol.h
+xdg-decoration-protocol.c
+.gemini/
