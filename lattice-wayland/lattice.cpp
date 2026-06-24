@@ -464,6 +464,9 @@ static struct zxdg_decoration_manager_v1   *g_deco_manager  = NULL;
 static struct zxdg_toplevel_decoration_v1  *g_toplevel_deco = NULL;
 
 static int g_fullscreen = 0;
+static int g_start_fullscreen = 0;
+static struct wl_callback *g_frame_callback = NULL;
+static bool g_benchmark_mode = false;
 
 static EGLDisplay  g_egl_display = EGL_NO_DISPLAY;
 static EGLContext  g_egl_context = EGL_NO_CONTEXT;
@@ -1317,6 +1320,8 @@ static void initSaver() {
     g_drawDepth  = dDepth + 2;
 }
 
+static void render_frame();
+
 /* -------------------------------------------------------------------------
  * XDG-shell callbacks
  * ---------------------------------------------------------------------- */
@@ -1329,6 +1334,14 @@ static const struct xdg_wm_base_listener wm_base_listener = { wm_base_ping };
 static void xdg_surface_configure(void *data, struct xdg_surface *surf, uint32_t serial) {
     xdg_surface_ack_configure(surf, serial);
     g_configured = 1;
+    if (g_egl_window && g_needs_resize) {
+        wl_egl_window_resize(g_egl_window, g_new_width, g_new_height, 0, 0);
+        g_win_width  = g_new_width;
+        g_win_height = g_new_height;
+        g_needs_resize = 0;
+        setupProjection(g_win_width, g_win_height);
+        render_frame();
+    }
 }
 static const struct xdg_surface_listener xdg_surface_lst = { xdg_surface_configure };
 
@@ -1660,13 +1673,19 @@ static void render_frame() {
     }
 
     /* Attach next frame callback before swap so it is included in the commit */
-    struct wl_callback *next = wl_surface_frame(g_surface);
-    wl_callback_add_listener(next, &frame_listener, NULL);
+    if (!g_benchmark_mode) {
+        if (g_frame_callback) {
+            wl_callback_destroy(g_frame_callback);
+        }
+        g_frame_callback = wl_surface_frame(g_surface);
+        wl_callback_add_listener(g_frame_callback, &frame_listener, NULL);
+    }
     eglSwapBuffers(g_egl_display, g_egl_surface);
 }
 
 static void frame_done(void *, struct wl_callback *cb, uint32_t) {
     wl_callback_destroy(cb);
+    g_frame_callback = NULL;
     if (!g_running) return;
 
     if (g_needs_resize) {
@@ -1718,11 +1737,18 @@ int main(int argc, char *argv[]) {
         else if (!strcmp(argv[i],"--no-smooth"))              dSmooth    = false;
         else if (!strcmp(argv[i],"--fog"))                    dFog       = true;
         else if (!strcmp(argv[i],"--no-fog"))                 dFog       = false;
+        else if (!strcmp(argv[i],"--fullscreen") || !strcmp(argv[i],"-fullscreen")) {
+            g_start_fullscreen = 1;
+        }
+        else if (!strcmp(argv[i],"--benchmark") || !strcmp(argv[i],"-benchmark")) {
+            g_benchmark_mode = true;
+        }
         else {
             fprintf(stderr,
                 "Usage: %s [--preset NAME] [--speed N] [--depth N] [--density N]\n"
                 "          [--thick N] [--fov N] [--longitude N] [--latitude N]\n"
                 "          [--pathrand N] [--smooth|--no-smooth] [--fog|--no-fog]\n"
+                "          [--fullscreen|-fullscreen] [--benchmark|-benchmark]\n"
                 "Presets: regular  chainmail  brassmesh  computer  slick  tasty\n",
                 argv[0]);
             return 1;
@@ -1739,6 +1765,7 @@ int main(int argc, char *argv[]) {
     struct wl_registry *registry = wl_display_get_registry(g_display);
     wl_registry_add_listener(registry, &registry_lst, NULL);
     wl_display_roundtrip(g_display);
+    fprintf(stderr, "DEBUG: Registry roundtrip done\n");
 
     if (!g_compositor || !g_wm_base) {
         fprintf(stderr, "lattice: missing required Wayland globals\n");
@@ -1765,14 +1792,20 @@ int main(int argc, char *argv[]) {
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
 
+    if (g_start_fullscreen) {
+        xdg_toplevel_set_fullscreen(g_toplevel, NULL);
+    }
+
     wl_surface_commit(g_surface);
 
     /* --- EGL context (before configure so we can create the surface after) --- */
     if (!init_egl()) return 1;
 
     /* --- Wait for initial configure --- */
+    fprintf(stderr, "DEBUG: Waiting for initial configure...\n");
     while (!g_configured)
         wl_display_dispatch(g_display);
+    fprintf(stderr, "DEBUG: Initial configure done (width: %d, height: %d)\n", g_win_width, g_win_height);
 
     if (g_needs_resize) {
         g_win_width  = g_new_width;
@@ -1780,24 +1813,42 @@ int main(int argc, char *argv[]) {
         g_needs_resize = 0;
     }
 
-    /* --- Create EGL window surface now that we know the size --- */
+    /* --- Initialize OpenGL state + screensaver --- */
+    fprintf(stderr, "DEBUG: Initializing EGL surface...\n");
     if (!create_egl_surface()) return 1;
 
-    /* --- Initialize OpenGL state + screensaver --- */
+    fprintf(stderr, "DEBUG: Loading functions...\n");
     load_vbo_fns();
     load_shader_fns();
+    fprintf(stderr, "DEBUG: Initializing saver...\n");
     initSaver();
 
     /* --- Frame-callback render loop --- */
+    fprintf(stderr, "DEBUG: Initializing performance metrics...\n");
     perf_init();
     g_wall_timer.tick();   /* prime: discard time elapsed during startup */
-    render_frame();        /* first frame; attaches callback chain to compositor */
+    
+    if (g_benchmark_mode) {
+        fprintf(stderr, "DEBUG: Entering benchmark loop...\n");
+        while (g_running) {
+            wl_display_dispatch_pending(g_display);
+            render_frame();
+        }
+    } else {
+        fprintf(stderr, "DEBUG: Calling first render_frame...\n");
+        render_frame();        /* first frame; attaches callback chain to compositor */
 
-    while (g_running) {
-        if (wl_display_dispatch(g_display) < 0) break;
+        fprintf(stderr, "DEBUG: Entering main loop...\n");
+        while (g_running) {
+            if (wl_display_dispatch(g_display) < 0) break;
+        }
     }
 
     /* --- Cleanup --- */
+    if (g_frame_callback) {
+        wl_callback_destroy(g_frame_callback);
+        g_frame_callback = NULL;
+    }
     if (g_prog)     fn_DeleteProgram(g_prog);
     if (g_inst_vbo) fn_DeleteBuffers(1, &g_inst_vbo);
     fn_DeleteBuffers(1, &g_all_vbo);
