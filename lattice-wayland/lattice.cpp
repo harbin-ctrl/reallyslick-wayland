@@ -190,6 +190,9 @@ struct GVertex {           /* 48 bytes, matches glVertexPointer offsets below */
 #ifndef GL_DYNAMIC_DRAW
 #define GL_DYNAMIC_DRAW  0x88B8
 #endif
+#ifndef GL_ELEMENT_ARRAY_BUFFER
+#define GL_ELEMENT_ARRAY_BUFFER 0x8893
+#endif
 
 typedef void (*PFN_GenBuffers_t)   (GLsizei, GLuint *);
 typedef void (*PFN_BindBuffer_t)   (GLenum, GLuint);
@@ -231,6 +234,7 @@ static PFNGLDISABLEVERTEXATTRIBARRAYPROC  fn_DisableVertexAttribArray = nullptr;
 static PFNGLVERTEXATTRIBPOINTERPROC       fn_VertexAttribPointer   = nullptr;
 static PFNGLVERTEXATTRIBDIVISORPROC       fn_VertexAttribDivisor   = nullptr;
 static PFNGLDRAWARRAYSINSTANCEDPROC       fn_DrawArraysInstanced   = nullptr;
+static PFNGLDRAWELEMENTSINSTANCEDPROC     fn_DrawElementsInstanced = nullptr;
 static PFNGLDELETESHADERPROC              fn_DeleteShader          = nullptr;
 static PFNGLDELETEPROGRAMPROC             fn_DeleteProgram         = nullptr;
 
@@ -268,6 +272,11 @@ static void load_shader_fns() {
     if (!fn_DrawArraysInstanced)
         fn_DrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)
             eglGetProcAddress("glDrawArraysInstancedARB");
+    fn_DrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)
+        eglGetProcAddress("glDrawElementsInstanced");
+    if (!fn_DrawElementsInstanced)
+        fn_DrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)
+            eglGetProcAddress("glDrawElementsInstancedARB");
 }
 
 /* Column-major 4×4 matrix helpers (match OpenGL convention exactly) */
@@ -383,8 +392,11 @@ static float aspectRatio;
 static float frameTime = 0.0f;
 static unsigned int latticeGrid[LATSIZE][LATSIZE][LATSIZE];
 static GLuint g_all_vbo;                   /* single buffer for all 20 objects */
-static int    g_obj_start [NUMOBJECTS];    /* first vertex of each object */
+static int    g_obj_start [NUMOBJECTS];    /* first vertex of each object in VBO */
 static int    g_obj_vcount[NUMOBJECTS];    /* vertex count of each object */
+static GLuint g_all_ibo;                   /* index buffer for all 20 objects */
+static int    g_obj_istart[NUMOBJECTS];    /* first index of each object in IBO */
+static int    g_obj_icount[NUMOBJECTS];    /* index count of each object */
 static GLuint g_inst_vbo  = 0;            /* per-frame per-instance translation data */
 static GLuint g_prog      = 0;            /* shader program */
 static float  g_proj_mat[16];             /* projection matrix (stored by setupProjection) */
@@ -474,65 +486,107 @@ static float interpolate(float a, float b, float c, float d, float where) {
  * Torus geometry — CPU side only (no GL calls; used by buildLatticeVBOs)
  * ---------------------------------------------------------------------- */
 
-/* Build one torus into buf as GL_TRIANGLES, with M's transform baked in.
- * Strip-to-triangle conversion preserves winding. */
-static void buildTorusCPU(std::vector<GVertex> &buf,
+/* Build one torus into verts+indices with M's transform baked in.
+ *
+ * Smooth: lat×lon unique vertices, lat×lon×6 indices.
+ *   The GPU Post-Transform Cache reuses each shaded vertex ~6 times → ~6×
+ *   fewer vertex-shader invocations vs. the old non-indexed expansion.
+ *
+ * Flat: 2×lat×lon vertices (strip pairs with face normals), lat×lon×6 indices.
+ *   Adjacent lat-strips cannot share a border row (theta-normals differ), so
+ *   we get 4 unique corners per quad → 4 vs 6 verts per quad = 1.5× saving. */
+static void buildTorusCPU(std::vector<GVertex> &verts,
+                           std::vector<unsigned int> &indices,
                            int smooth, int lon, int lat,
                            float cr, float tr,
                            const float M[16], const float col[4])
 {
     float vstep = 1.0f / (float)lat;
     float ustep = (float)(int)(cr/tr + 0.5f) / (float)lon;
-    GVertex strip[204*2];   /* (lon+1)*2, lon≤100 */
 
-    float v2 = 0.0f;
-    for (int i = 0; i < lat; i++) {
-        float v1=v2; v2+=vstep;
-        float ti =PIx2*(float)i    /(float)lat;
-        float ti1=PIx2*(float)(i+1)/(float)lat;
-        float cosn=cosf(ti), sinn=sinf(ti), cosnn=cosf(ti1), sinnn=sinf(ti1);
-        float r=cr+tr*cosn, rr=cr+tr*cosnn, z=tr*sinn, zz=tr*sinnn;
+    auto xfv = [&](GVertex &v) {
+        float px=v.pos[0],py=v.pos[1],pz=v.pos[2];
+        float nx=v.normal[0],ny=v.normal[1],nz=v.normal[2];
+        v.pos[0]=M[0]*px+M[4]*py+M[8]*pz +M[12];
+        v.pos[1]=M[1]*px+M[5]*py+M[9]*pz +M[13];
+        v.pos[2]=M[2]*px+M[6]*py+M[10]*pz+M[14];
+        v.normal[0]=M[0]*nx+M[4]*ny+M[8]*nz;
+        v.normal[1]=M[1]*nx+M[5]*ny+M[9]*nz;
+        v.normal[2]=M[2]*nx+M[6]*ny+M[10]*nz;
+    };
 
-        float nc=cosn, ns=sinn, ncc=cosnn, nss=sinnn;
-        if (!smooth) {
-            float mid=PIx2*((float)i+0.5f)/(float)lat;
-            nc=ncc=cosf(mid); ns=nss=sinf(mid);
-        }
-
-        int nv=0; float u=0.0f;
-        float old_c=1,old_s=0,old_nc=1,old_ns=0;
-        for (int j=0; j<lon; j++) {
-            float phi=PIx2*(float)j/(float)lon;
-            float cosa=cosf(phi), sina=sinf(phi), ncosa, nsina;
-            if (smooth) { ncosa=cosa; nsina=sina; }
-            else {
-                float pn=PIx2*((float)j-0.5f)/(float)lon;
-                ncosa=cosf(pn); nsina=sinf(pn);
+    if (smooth) {
+        /* ------ smooth: lat×lon unique shared vertices ------------------- */
+        unsigned int vbase = (unsigned int)verts.size();
+        for (int i = 0; i < lat; i++) {
+            float theta = PIx2*(float)i/(float)lat;
+            float cosn=cosf(theta), sinn=sinf(theta);
+            float r=cr+tr*cosn, z=tr*sinn;
+            float vi=(float)i*vstep;
+            for (int j = 0; j < lon; j++) {
+                float phi=PIx2*(float)j/(float)lon;
+                float cosa=cosf(phi), sina=sinf(phi);
+                GVertex v;
+                v.pos   [0]=r*cosa;    v.pos   [1]=r*sina;    v.pos   [2]=z;
+                v.normal[0]=cosn*cosa; v.normal[1]=cosn*sina; v.normal[2]=sinn;
+                v.tc[0]=(float)j*ustep; v.tc[1]=vi;
+                v.color[0]=col[0]; v.color[1]=col[1]; v.color[2]=col[2]; v.color[3]=col[3];
+                xfv(v);
+                verts.push_back(v);
             }
-            if (j==0){old_c=cosa;old_s=sina;old_nc=ncosa;old_ns=nsina;}
-
-            strip[nv++]={{cosa*rr,sina*rr,zz},{ncc*ncosa,ncc*nsina,nss},{u,v2},{col[0],col[1],col[2],col[3]}};
-            strip[nv++]={{cosa*r, sina*r, z },{nc *ncosa,nc *nsina,ns },{u,v1},{col[0],col[1],col[2],col[3]}};
-            u+=ustep;
         }
-        strip[nv++]={{old_c*rr,old_s*rr,zz},{ncc*old_nc,ncc*old_ns,nss},{u,v2},{col[0],col[1],col[2],col[3]}};
-        strip[nv++]={{old_c*r, old_s*r, z },{nc *old_nc,nc *old_ns,ns },{u,v1},{col[0],col[1],col[2],col[3]}};
+        /* Quad (i,j): rows i and (i+1)%lat, columns j and (j+1)%lon.
+         * Winding matches old strip-to-triangle expansion (verified above). */
+        for (int i = 0; i < lat; i++) {
+            unsigned int r0 = (unsigned int)(i * lon);
+            unsigned int r1 = (unsigned int)(((i+1)%lat) * lon);
+            for (int j = 0; j < lon; j++) {
+                unsigned int jn = (unsigned int)((j+1)%lon);
+                unsigned int r0c0=vbase+r0+(unsigned int)j,  r0c1=vbase+r0+jn;
+                unsigned int r1c0=vbase+r1+(unsigned int)j,  r1c1=vbase+r1+jn;
+                indices.push_back(r1c0); indices.push_back(r0c0); indices.push_back(r1c1);
+                indices.push_back(r1c1); indices.push_back(r0c0); indices.push_back(r0c1);
+            }
+        }
+    } else {
+        /* ------ flat: 2 vertices per column per lat-strip ---------------- */
+        for (int i = 0; i < lat; i++) {
+            float ti =PIx2*(float)i    /(float)lat;
+            float ti1=PIx2*(float)(i+1)/(float)lat;
+            float cosn=cosf(ti), sinn=sinf(ti), cosnn=cosf(ti1), sinnn=sinf(ti1);
+            float r=cr+tr*cosn, rr=cr+tr*cosnn, z=tr*sinn, zz=tr*sinnn;
+            /* flat theta normal: midpoint of this strip */
+            float mid=PIx2*((float)i+0.5f)/(float)lat;
+            float nc=cosf(mid), ns=sinf(mid);
+            float vi=(float)i*vstep, vi1=(float)(i+1)*vstep;
 
-        for (int t=0; t<nv-2; t++) {
-            GVertex a=strip[t], b=strip[t+1], c_=strip[t+2];
-            if (t%2!=0) { GVertex tmp=a; a=b; b=tmp; }
-            auto xf=[&](GVertex &v){
-                float px=v.pos[0],py=v.pos[1],pz=v.pos[2];
-                float nx=v.normal[0],ny=v.normal[1],nz=v.normal[2];
-                v.pos[0]=M[0]*px+M[4]*py+M[8]*pz +M[12];
-                v.pos[1]=M[1]*px+M[5]*py+M[9]*pz +M[13];
-                v.pos[2]=M[2]*px+M[6]*py+M[10]*pz+M[14];
-                v.normal[0]=M[0]*nx+M[4]*ny+M[8]*nz;
-                v.normal[1]=M[1]*nx+M[5]*ny+M[9]*nz;
-                v.normal[2]=M[2]*nx+M[6]*ny+M[10]*nz;
-            };
-            xf(a); xf(b); xf(c_);
-            buf.push_back(a); buf.push_back(b); buf.push_back(c_);
+            unsigned int sbase=(unsigned int)verts.size();
+            float old_c=1,old_s=0,old_nc=1,old_ns=0;
+            for (int j=0; j<lon; j++) {
+                float phi=PIx2*(float)j/(float)lon;
+                float cosa=cosf(phi), sina=sinf(phi);
+                float pn=PIx2*((float)j-0.5f)/(float)lon;
+                float ncosa=cosf(pn), nsina=sinf(pn);
+                if (j==0){old_c=cosa;old_s=sina;old_nc=ncosa;old_ns=nsina;}
+                /* upper = row i+1 (rr,zz), lower = row i (r,z) */
+                GVertex vu={{cosa*rr,sina*rr,zz},{nc*ncosa,nc*nsina,ns},{(float)j*ustep,vi1},{col[0],col[1],col[2],col[3]}};
+                GVertex vl={{cosa*r, sina*r, z },{nc*ncosa,nc*nsina,ns},{(float)j*ustep,vi },{col[0],col[1],col[2],col[3]}};
+                xfv(vu); xfv(vl);
+                verts.push_back(vu);   /* sbase + 2*j+0 */
+                verts.push_back(vl);   /* sbase + 2*j+1 */
+            }
+            (void)old_c; (void)old_s; (void)old_nc; (void)old_ns;
+
+            for (int j=0; j<lon; j++) {
+                unsigned int jn=(unsigned int)((j+1)%lon);
+                unsigned int u0=sbase+(unsigned int)(2*j);   /* upper at j   */
+                unsigned int l0=sbase+(unsigned int)(2*j+1); /* lower at j   */
+                unsigned int u1=sbase+2*jn;                  /* upper at j+1 */
+                unsigned int l1=sbase+2*jn+1;                /* lower at j+1 */
+                /* winding: (upper@j, lower@j, upper@j+1), (upper@j+1, lower@j, lower@j+1) */
+                indices.push_back(u0); indices.push_back(l0); indices.push_back(u1);
+                indices.push_back(u1); indices.push_back(l0); indices.push_back(l1);
+            }
         }
     }
 }
@@ -544,8 +598,10 @@ static void buildTorusCPU(std::vector<GVertex> &buf,
  * All 20 objects are packed into one VBO so render_scene binds once
  * and varies only the start/count per glDrawArrays call. */
 static void buildLatticeVBOs() {
-    std::vector<GVertex> all_verts;
+    std::vector<GVertex>       all_verts;
+    std::vector<unsigned int>  all_indices;
     all_verts.reserve(NUMOBJECTS * 576);
+    all_indices.reserve(NUMOBJECTS * 576 * 6);
 
     float thick = (float)dThick * 0.001f;
     int d = 0;
@@ -563,19 +619,23 @@ static void buildLatticeVBOs() {
     };
 
     for (int i = 0; i < NUMOBJECTS; i++) {
-        g_obj_start[i]  = (int)all_verts.size();
+        g_obj_start [i] = (int)all_verts.size();
         g_obj_vcount[i] = 0;
+        g_obj_istart[i] = (int)all_indices.size();
+        g_obj_icount[i] = 0;
 
         float col[4], T[16], R[16], M[16];
 
-#define RING(rotExpr)                                              \
-        if (d < dDensity) {                                        \
-            pickCol(col); rotExpr;                                 \
-            size_t before = all_verts.size();                      \
-            buildTorusCPU(all_verts, dSmooth, dLongitude,          \
-                          dLatitude, 0.36f-thick, thick, M, col);  \
-            g_obj_vcount[i] += (int)(all_verts.size() - before);  \
-        }                                                          \
+#define RING(rotExpr)                                                    \
+        if (d < dDensity) {                                              \
+            pickCol(col); rotExpr;                                       \
+            size_t vbefore = all_verts.size();                           \
+            size_t ibefore = all_indices.size();                         \
+            buildTorusCPU(all_verts, all_indices, dSmooth, dLongitude,  \
+                          dLatitude, 0.36f-thick, thick, M, col);        \
+            g_obj_vcount[i] += (int)(all_verts.size()   - vbefore);     \
+            g_obj_icount[i] += (int)(all_indices.size() - ibefore);     \
+        }                                                                \
         d = (d+37) % 100;
 
         RING(mat4_translate(T,-0.25f,-0.25f,-0.25f);
@@ -600,9 +660,11 @@ static void buildLatticeVBOs() {
             pickCol(col);
             mat4_translate(T,-0.25f,0.25f,-0.25f);
             mat4_rotate(R,rsRandi(2)?90.f:-90.f,0,1,0); mat4_mul(M,T,R);
-            size_t before = all_verts.size();
-            buildTorusCPU(all_verts,dSmooth,dLongitude,dLatitude,0.36f-thick,thick,M,col);
-            g_obj_vcount[i] += (int)(all_verts.size() - before);
+            size_t vbefore = all_verts.size();
+            size_t ibefore = all_indices.size();
+            buildTorusCPU(all_verts,all_indices,dSmooth,dLongitude,dLatitude,0.36f-thick,thick,M,col);
+            g_obj_vcount[i] += (int)(all_verts.size()   - vbefore);
+            g_obj_icount[i] += (int)(all_indices.size() - ibefore);
         }
         d = (d+37) % 100;   /* matches the d advance after glEndList in original */
 #undef RING
@@ -614,6 +676,14 @@ static void buildLatticeVBOs() {
         fn_BufferData(GL_ARRAY_BUFFER, (ptrdiff_t)(all_verts.size()*sizeof(GVertex)),
                       all_verts.data(), GL_STATIC_DRAW);
         fn_BindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+    fn_GenBuffers(1, &g_all_ibo);
+    if (!all_indices.empty()) {
+        fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_all_ibo);
+        fn_BufferData(GL_ELEMENT_ARRAY_BUFFER,
+                      (ptrdiff_t)(all_indices.size()*sizeof(unsigned int)),
+                      all_indices.data(), GL_STATIC_DRAW);
+        fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 }
 
@@ -1014,12 +1084,18 @@ static void render_scene() {
     fn_EnableVertexAttribArray(4);
     fn_VertexAttribDivisor(4, 1);
 
+    /* Bind IBO — stays bound for all instanced draw calls below */
+    fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_all_ibo);
+
     /* --- One instanced draw per non-empty object type (~20 calls max) */
     for (int t = 0; t < NUMOBJECTS; t++) {
-        if (type_cnt[t] == 0) continue;
+        if (type_cnt[t] == 0 || g_obj_icount[t] == 0) continue;
+        fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
         fn_VertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 12,
                                (const void *)(ptrdiff_t)(type_start[t] * 12));
-        fn_DrawArraysInstanced(GL_TRIANGLES, g_obj_start[t], g_obj_vcount[t], type_cnt[t]);
+        fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t], GL_UNSIGNED_INT,
+                                 (const void *)(ptrdiff_t)(g_obj_istart[t] * (int)sizeof(unsigned int)),
+                                 type_cnt[t]);
     }
 
     fn_DisableVertexAttribArray(0);
@@ -1027,6 +1103,7 @@ static void render_scene() {
     fn_DisableVertexAttribArray(2);
     fn_DisableVertexAttribArray(3);
     fn_DisableVertexAttribArray(4);
+    fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     fn_BindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
@@ -1263,6 +1340,7 @@ static void applyPreset(int idx) {
     glDisable(GL_DEPTH_TEST);
     glDeleteTextures(2, texture_id);
     fn_DeleteBuffers(1, &g_all_vbo);
+    fn_DeleteBuffers(1, &g_all_ibo);
 
     /* Rebuild for new preset */
     if (dTexture != 2 && dTexture != 6) glEnable(GL_DEPTH_TEST);
@@ -1688,6 +1766,7 @@ int main(int argc, char *argv[]) {
     if (g_prog)     fn_DeleteProgram(g_prog);
     if (g_inst_vbo) fn_DeleteBuffers(1, &g_inst_vbo);
     fn_DeleteBuffers(1, &g_all_vbo);
+    fn_DeleteBuffers(1, &g_all_ibo);
     delete theCamera;
     eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(g_egl_display, g_egl_surface);
