@@ -184,7 +184,7 @@ static GLuint g_prog     = 0;
 static GLuint g_tex_id   = 0;
 
 static float g_proj_mat[16];
-static GLint g_u_proj, g_u_mv, g_u_color, g_u_tex_type;
+static GLint g_u_proj, g_u_mv, g_u_color, g_u_tex_mode;
 
 static void initWave (int nr) {
     wtime[nr] = 0;
@@ -229,40 +229,15 @@ static void initTextures() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
-    if (dTexture) {
-        switch (dTexture) {
-        case 1:
-            gluBuild2DMipmaps(GL_TEXTURE_2D, 1, TEXSIZE, TEXSIZE, GL_RGB, GL_UNSIGNED_BYTE, (const unsigned char *)smokemap);
-            break;
-        case 2:
-            gluBuild2DMipmaps(GL_TEXTURE_2D, 1, TEXSIZE, TEXSIZE, GL_RGB, GL_UNSIGNED_BYTE, (const unsigned char *)ripplemap);
-            break;
-        case 3: {
-            int i, j;
-            double x, y, r, d;
-            unsigned char texbuf[64][64];
-            memset((void *)&texbuf, 0, 4096);
-            r = 32.0;
-            for (i = 0; i < 64; i++) {
-                for (j = 0; j < 64; j++) {
-                    x = abs(i - 32);
-                    y = abs(j - 32);
-                    d = sqrt(x * x + y * y);
-                    if (d < r) {
-                        d = 1.0 - (d / r);
-                        texbuf[i][j] = (unsigned char)(255 * d * d);
-                    }
-                }
-            }
-            gluBuild2DMipmaps(GL_TEXTURE_2D, 1, 64, 64, GL_LUMINANCE, GL_UNSIGNED_BYTE, texbuf);
-            break;
-        }
-        }
+    if (dTexture == 1) {
+        gluBuild2DMipmaps(GL_TEXTURE_2D, 1, TEXSIZE, TEXSIZE, GL_RGB, GL_UNSIGNED_BYTE, (const unsigned char *)smokemap);
+    } else if (dTexture == 2) {
+        gluBuild2DMipmaps(GL_TEXTURE_2D, 1, TEXSIZE, TEXSIZE, GL_RGB, GL_UNSIGNED_BYTE, (const unsigned char *)ripplemap);
     } else {
-        unsigned char img[] = { 0, 255, 255, 0 };
-        gluBuild2DMipmaps(GL_TEXTURE_2D, 1, 2, 2, GL_LUMINANCE, GL_UNSIGNED_BYTE, img);
+        unsigned char img[] = { 255 };
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, 1, 1, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, img);
     }
 }
 
@@ -288,13 +263,26 @@ static void build_shader_program() {
         "in vec2 v_tc;\n"
         "uniform vec4 u_color;\n"
         "uniform sampler2D u_samp;\n"
-        "uniform int u_tex_type;\n" /* 0=Luminance 1=RGB */
+        "uniform int u_tex_mode;\n" /* 0=None, 1=Smoke, 2=Ripples, 3=Smooth */
         "out vec4 frag;\n"
         "void main() {\n"
-        "    vec4 tex = texture(u_samp, v_tc);\n"
-        "    if (u_tex_type == 0) {\n"
-        "        frag = vec4(u_color.rgb * tex.r, 1.0);\n"
-        "    } else {\n"
+        "    if (u_tex_mode == 3) {\n"
+        "        float dx = v_tc.x - 0.5;\n"
+        "        float dy = v_tc.y - 0.5;\n"
+        "        float dist = sqrt(dx * dx + dy * dy);\n"
+        "        float intensity = 0.0;\n"
+        "        if (dist < 0.5) {\n"
+        "            float d = 1.0 - (dist / 0.5);\n"
+        "            intensity = d * d;\n"
+        "        }\n"
+        "        frag = vec4(u_color.rgb * intensity, 1.0);\n"
+        "    }\n"
+        "    else if (u_tex_mode == 0) {\n"
+        "        float intensity = mix(v_tc.x, 1.0 - v_tc.x, v_tc.y);\n"
+        "        frag = vec4(u_color.rgb * intensity, 1.0);\n"
+        "    }\n"
+        "    else {\n"
+        "        vec4 tex = texture(u_samp, v_tc);\n"
         "        frag = vec4(u_color.rgb * tex.rgb, 1.0);\n"
         "    }\n"
         "}\n";
@@ -334,7 +322,7 @@ static void build_shader_program() {
     g_u_proj     = fn_GetUniformLocation(g_prog, "u_proj");
     g_u_mv       = fn_GetUniformLocation(g_prog, "u_mv");
     g_u_color    = fn_GetUniformLocation(g_prog, "u_color");
-    g_u_tex_type = fn_GetUniformLocation(g_prog, "u_tex_type");
+    g_u_tex_mode = fn_GetUniformLocation(g_prog, "u_tex_mode");
 
     fn_Uniform1i(fn_GetUniformLocation(g_prog, "u_samp"), 0);
 }
@@ -442,9 +430,7 @@ static void render_scene(float frameTime) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_tex_id);
     
-    /* 0=Luminance, 1=RGB */
-    int type = (dTexture == 0 || dTexture == 3) ? 0 : 1;
-    fn_Uniform1i(g_u_tex_type, type);
+    fn_Uniform1i(g_u_tex_mode, dTexture);
 
     /* Global rotation matrices */
     float T[16], RX[16], RY[16], RZ[16], T1[16], T2[16], MV_global[16];
