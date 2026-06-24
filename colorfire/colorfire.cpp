@@ -265,6 +265,17 @@ static void build_shader_program() {
         "uniform sampler2D u_samp;\n"
         "uniform int u_tex_mode;\n" /* 0=None, 1=Smoke, 2=Ripples, 3=Smooth */
         "out vec4 frag;\n"
+        
+        "vec4 textureSmooth(sampler2D sampler, vec2 uv) {\n"
+        "    vec2 texSize = vec2(textureSize(sampler, 0));\n"
+        "    vec2 uv_scaled = uv * texSize;\n"
+        "    vec2 i = floor(uv_scaled - 0.5);\n"
+        "    vec2 f = fract(uv_scaled - 0.5);\n"
+        "    vec2 w = f * f * (3.0 - 2.0 * f);\n"
+        "    vec2 uv_smooth = (i + 0.5 + w) / texSize;\n"
+        "    return texture(sampler, uv_smooth);\n"
+        "}\n"
+        
         "void main() {\n"
         "    if (u_tex_mode == 3) {\n"
         "        float dx = v_tc.x - 0.5;\n"
@@ -282,7 +293,7 @@ static void build_shader_program() {
         "        frag = vec4(u_color.rgb * intensity, 1.0);\n"
         "    }\n"
         "    else {\n"
-        "        vec4 tex = texture(u_samp, v_tc);\n"
+        "        vec4 tex = textureSmooth(u_samp, v_tc);\n"
         "        frag = vec4(u_color.rgb * tex.rgb, 1.0);\n"
         "    }\n"
         "}\n";
