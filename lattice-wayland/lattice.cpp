@@ -368,14 +368,18 @@ struct Preset {
     int texType;
 };
 
+/* Depth values are +2 over the original Windows presets: distance LOD and
+ * front-to-back draw order make the extra range affordable (all presets
+ * hold 60+ FPS fullscreen on a Pi 400), and the longer fade-in distance
+ * removes the jarring close-range pop-in. */
 static const Preset PRESETS[] = {
     /* name        lon lat  thk  den dep fov  pr  sp   smo    fog  tex */
-    {"regular",     16,  8,  50,  50,  5, 90,  7, 10, false, true,  0},
-    {"chainmail",   24, 12,  50,  80,  4, 90,  7, 10, true,  true,  3},
-    {"brassmesh",    4,  4,  40,  50,  5, 90,  7, 10, false, true,  4},
-    {"computer",     4,  6,  70,  90,  4, 90,  7, 10, false, true,  7},
-    {"slick",       24, 12, 100,  30,  5, 90,  7, 10, true,  true,  5},
-    {"tasty",       24, 12, 100,  25,  5, 90,  7, 10, true,  true,  8},
+    {"regular",     16,  8,  50,  50,  7, 90,  7, 10, false, true,  0},
+    {"chainmail",   24, 12,  50,  80,  6, 90,  7, 10, true,  true,  3},
+    {"brassmesh",    4,  4,  40,  50,  7, 90,  7, 10, false, true,  4},
+    {"computer",     4,  6,  70,  90,  6, 90,  7, 10, false, true,  7},
+    {"slick",       24, 12, 100,  30,  7, 90,  7, 10, true,  true,  5},
+    {"tasty",       24, 12, 100,  25,  7, 90,  7, 10, true,  true,  8},
     {NULL}
 };
 
@@ -383,7 +387,7 @@ static int  dLongitude = 4;
 static int  dLatitude  = 4;
 static int  dThick     = 40;
 static int  dDensity   = 50;
-static int  dDepth     = 5;
+static int  dDepth     = 7;   /* matches brassmesh preset (see PRESETS note) */
 static int  dFov       = 90;
 static int  dPathrand  = 7;
 static int  dSpeed     = 10;
@@ -406,7 +410,7 @@ static unsigned int latticeGrid[LATSIZE][LATSIZE][LATSIZE];
 /* Distance LOD: each object is baked at NUM_LODS tessellation levels.
  * Level 0 is full detail; higher levels reduce longitude/latitude counts.
  * Far cells are drawn with coarser meshes — fog hides the difference. */
-#define NUM_LODS 3
+#define NUM_LODS 4
 static GLuint g_all_vbo;                   /* single buffer for all 20 objects × LODs */
 static GLuint g_all_ibo;                   /* index buffer for all 20 objects × LODs */
 static int    g_obj_istart[NUMOBJECTS][NUM_LODS]; /* first index of each object+LOD in IBO */
@@ -621,8 +625,18 @@ static void lodDims(int level, int lon, int lat, int *outLon, int *outLat) {
         if (lon > 6) lo = (lon/3 > 6) ? lon/3 : 6;
         if (lat > 3) la = (lat/3 > 3) ? lat/3 : 3;
     }
+    if (level >= 3) {
+        if (lon > 4) lo = (lon/4 > 4) ? lon/4 : 4;
+        /* lat already at its floor of 3 from level 2 */
+    }
     *outLon = lo; *outLat = la;
 }
+
+/* LOD tier boundaries as absolute view depths.  Projected detail depends on
+ * absolute distance (not on the far plane), so these stay fixed when --depth
+ * extends the scene: deeper scenes add only coarse far geometry.  By 2.25
+ * units fog has dimmed a default-depth scene to ~75% brightness. */
+static const float LOD_DIST[NUM_LODS-1] = {2.25f, 3.5f, 4.75f};
 
 /* buildLatticeVBOs — replaces makeLatticeObjects.
  * Replicates the exact same rand() call sequence so colours and ring
@@ -1074,10 +1088,7 @@ static void render_scene() {
     int nvis = 0;
 
     /* Projected size scales with 1/|eye z|, and fog depth is |eye z| too, so
-     * view depth (not Euclidean distance) is the right LOD metric.  By the
-     * first threshold fog has already dimmed cells noticeably. */
-    const float lodNear = dLod ? 0.45f * theCamera->farplane : 1e9f;
-    const float lodFar  = dLod ? 0.70f * theCamera->farplane : 1e9f;
+     * view depth (not Euclidean distance) is the right LOD metric. */
 
     float tv0 = (float)(globalxyz[0] - g_drawDepth) - g_xyz[0];
     int mod_i = myMod(globalxyz[0] - g_drawDepth);
@@ -1105,7 +1116,9 @@ static void render_scene() {
                     int t = (int)latticeGrid[mod_i][mod_j][mod_k];
                     if (g_obj_icount[t][0] > 0 && nvis < 16000) {
                         float dz = -ep[2];   /* view depth (eye looks down -z) */
-                        int lod = (dz > lodFar) ? 2 : (dz > lodNear) ? 1 : 0;
+                        int lod = 0;
+                        if (dLod)
+                            while (lod < NUM_LODS-1 && dz > LOD_DIST[lod]) lod++;
                         vis[nvis++] = {(short)i,(short)j,(short)k,
                                        (short)(t*NUM_LODS + lod)};
                     }
@@ -1172,17 +1185,20 @@ static void render_scene() {
     /* Bind IBO — stays bound for all instanced draw calls below */
     fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_all_ibo);
 
-    /* --- One instanced draw per non-empty (object type, LOD) bucket */
-    for (int b = 0; b < NBUCKETS; b++) {
-        if (type_cnt[b] == 0) continue;
-        int t = b / NUM_LODS, L = b % NUM_LODS;
-        if (g_obj_icount[t][L] == 0) continue;
-        fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
-        fn_VertexAttribPointer(4, 3, GL_SHORT, GL_FALSE, sizeof(short) * 3,
-                               (const void *)(ptrdiff_t)(type_start[b] * sizeof(short) * 3));
-        fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t][L], GL_UNSIGNED_INT,
-                                 (const void *)(ptrdiff_t)(g_obj_istart[t][L] * (int)sizeof(unsigned int)),
-                                 type_cnt[b]);
+    /* --- One instanced draw per non-empty (object type, LOD) bucket.
+     * Near LOD tiers are drawn first (coarse front-to-back order) so early-Z
+     * rejects the fragments of far rings hidden behind near ones. */
+    for (int L = 0; L < NUM_LODS; L++) {
+        for (int t = 0; t < NUMOBJECTS; t++) {
+            int b = t*NUM_LODS + L;
+            if (type_cnt[b] == 0 || g_obj_icount[t][L] == 0) continue;
+            fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
+            fn_VertexAttribPointer(4, 3, GL_SHORT, GL_FALSE, sizeof(short) * 3,
+                                   (const void *)(ptrdiff_t)(type_start[b] * sizeof(short) * 3));
+            fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t][L], GL_UNSIGNED_INT,
+                                     (const void *)(ptrdiff_t)(g_obj_istart[t][L] * (int)sizeof(unsigned int)),
+                                     type_cnt[b]);
+        }
     }
 
     fn_DisableVertexAttribArray(0);
