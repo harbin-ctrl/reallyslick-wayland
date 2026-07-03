@@ -27,6 +27,7 @@
  *   --pathrand N   (1-10)
  *   --smooth / --no-smooth
  *   --fog  / --no-fog
+ *   --lod  / --no-lod   (simplify geometry at a distance; default on)
  */
 
 #include <cstdio>
@@ -388,6 +389,7 @@ static int  dPathrand  = 7;
 static int  dSpeed     = 10;
 static bool dSmooth    = false;
 static bool dFog       = true;
+static bool dLod       = true;   /* simplify geometry at a distance */
 static int  dTexture   = 4;    /* brassmesh default */
 static const char *dPresetName = "brassmesh";
 static int         g_preset_idx = 2;   /* brassmesh */
@@ -401,12 +403,14 @@ static unsigned int texture_id[2];
 static float aspectRatio;
 static float frameTime = 0.0f;
 static unsigned int latticeGrid[LATSIZE][LATSIZE][LATSIZE];
-static GLuint g_all_vbo;                   /* single buffer for all 20 objects */
-static int    g_obj_start [NUMOBJECTS];    /* first vertex of each object in VBO */
-static int    g_obj_vcount[NUMOBJECTS];    /* vertex count of each object */
-static GLuint g_all_ibo;                   /* index buffer for all 20 objects */
-static int    g_obj_istart[NUMOBJECTS];    /* first index of each object in IBO */
-static int    g_obj_icount[NUMOBJECTS];    /* index count of each object */
+/* Distance LOD: each object is baked at NUM_LODS tessellation levels.
+ * Level 0 is full detail; higher levels reduce longitude/latitude counts.
+ * Far cells are drawn with coarser meshes — fog hides the difference. */
+#define NUM_LODS 3
+static GLuint g_all_vbo;                   /* single buffer for all 20 objects × LODs */
+static GLuint g_all_ibo;                   /* index buffer for all 20 objects × LODs */
+static int    g_obj_istart[NUMOBJECTS][NUM_LODS]; /* first index of each object+LOD in IBO */
+static int    g_obj_icount[NUMOBJECTS][NUM_LODS]; /* index count of each object+LOD */
 static GLuint g_inst_vbo  = 0;            /* per-frame per-instance translation data */
 static GLuint g_prog      = 0;            /* shader program */
 static float  g_proj_mat[16];             /* projection matrix (stored by setupProjection) */
@@ -604,6 +608,22 @@ static void buildTorusCPU(std::vector<GVertex> &verts,
     }
 }
 
+/* Tessellation for a given LOD level.  The tube cross-section (lat) shrinks
+ * faster than the ring outline (lon) because it is much smaller on screen.
+ * Never increases counts; presets that are already coarse stay unchanged. */
+static void lodDims(int level, int lon, int lat, int *outLon, int *outLat) {
+    int lo = lon, la = lat;
+    if (level >= 1) {
+        if (lon > 8) lo = (lon/2 > 8) ? lon/2 : 8;
+        if (lat > 4) la = (lat/2 > 4) ? lat/2 : 4;
+    }
+    if (level >= 2) {
+        if (lon > 6) lo = (lon/3 > 6) ? lon/3 : 6;
+        if (lat > 3) la = (lat/3 > 3) ? lat/3 : 3;
+    }
+    *outLon = lo; *outLat = la;
+}
+
 /* buildLatticeVBOs — replaces makeLatticeObjects.
  * Replicates the exact same rand() call sequence so colours and ring
  * orientations are identical to what display lists would have produced.
@@ -631,23 +651,31 @@ static void buildLatticeVBOs() {
         }
     };
 
-    for (int i = 0; i < NUMOBJECTS; i++) {
-        g_obj_start [i] = (int)all_verts.size();
-        g_obj_vcount[i] = 0;
-        g_obj_istart[i] = (int)all_indices.size();
-        g_obj_icount[i] = 0;
+    /* Per-LOD tessellation for the current preset; each level reuses an
+     * earlier one whose dimensions came out identical (coarse presets). */
+    int llon[NUM_LODS], llat[NUM_LODS], lalias[NUM_LODS];
+    for (int L = 0; L < NUM_LODS; L++) {
+        lodDims(L, dLongitude, dLatitude, &llon[L], &llat[L]);
+        lalias[L] = L;
+        for (int p = 0; p < L; p++)
+            if (llon[p] == llon[L] && llat[p] == llat[L]) { lalias[L] = p; break; }
+    }
 
-        float col[4], T[16], R[16], M[16];
+    struct RingDef { float col[4]; float M[16]; };
+
+    for (int i = 0; i < NUMOBJECTS; i++) {
+        /* Pass 1: decide which rings exist and capture their colour/transform.
+         * This consumes rand() in the exact same order as the original, so
+         * colours and ring orientations are unchanged. */
+        RingDef rings[6];
+        int nrings = 0;
+        float T[16], R[16];
 
 #define RING(rotExpr)                                                    \
         if (d < dDensity) {                                              \
-            pickCol(col); rotExpr;                                       \
-            size_t vbefore = all_verts.size();                           \
-            size_t ibefore = all_indices.size();                         \
-            buildTorusCPU(all_verts, all_indices, dSmooth, dLongitude,  \
-                          dLatitude, 0.36f-thick, thick, M, col);        \
-            g_obj_vcount[i] += (int)(all_verts.size()   - vbefore);     \
-            g_obj_icount[i] += (int)(all_indices.size() - ibefore);     \
+            RingDef &rg = rings[nrings++];                               \
+            float *M = rg.M;                                             \
+            pickCol(rg.col); rotExpr;                                    \
         }                                                                \
         d = (d+37) % 100;
 
@@ -668,19 +696,25 @@ static void buildLatticeVBOs() {
         RING(mat4_translate(T,-0.25f,0.25f,0.25f);
              mat4_rotate(R,rsRandi(2)?90.f:-90.f,1,0,0); mat4_mul(M,T,R);)
 
-        /* Ring 5 — no trailing d advance in the original before glEndList */
-        if (d < dDensity) {
-            pickCol(col);
-            mat4_translate(T,-0.25f,0.25f,-0.25f);
-            mat4_rotate(R,rsRandi(2)?90.f:-90.f,0,1,0); mat4_mul(M,T,R);
-            size_t vbefore = all_verts.size();
-            size_t ibefore = all_indices.size();
-            buildTorusCPU(all_verts,all_indices,dSmooth,dLongitude,dLatitude,0.36f-thick,thick,M,col);
-            g_obj_vcount[i] += (int)(all_verts.size()   - vbefore);
-            g_obj_icount[i] += (int)(all_indices.size() - ibefore);
-        }
-        d = (d+37) % 100;   /* matches the d advance after glEndList in original */
+        RING(mat4_translate(T,-0.25f,0.25f,-0.25f);
+             mat4_rotate(R,rsRandi(2)?90.f:-90.f,0,1,0); mat4_mul(M,T,R);)
 #undef RING
+
+        /* Pass 2: bake the object's rings once per distinct LOD level.
+         * Indices for each (object, LOD) are contiguous in the shared IBO. */
+        for (int L = 0; L < NUM_LODS; L++) {
+            if (lalias[L] != L) {
+                g_obj_istart[i][L] = g_obj_istart[i][lalias[L]];
+                g_obj_icount[i][L] = g_obj_icount[i][lalias[L]];
+                continue;
+            }
+            g_obj_istart[i][L] = (int)all_indices.size();
+            for (int r = 0; r < nrings; r++)
+                buildTorusCPU(all_verts, all_indices, dSmooth, llon[L],
+                              llat[L], 0.36f-thick, thick,
+                              rings[r].M, rings[r].col);
+            g_obj_icount[i][L] = (int)(all_indices.size() - (size_t)g_obj_istart[i][L]);
+        }
     }
 
     fn_GenBuffers(1, &g_all_vbo);
@@ -1032,10 +1066,18 @@ static void render_scene() {
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    /* --- Pass 1: collect visible cells (single loop, avoids duplicate frustum test) */
-    struct CellRef { short i, j, k, t; };
+    /* --- Pass 1: collect visible cells (single loop, avoids duplicate frustum test)
+     * Each cell is also classified by view depth into a LOD level; `b` is the
+     * combined bucket index (object type × NUM_LODS + lod). */
+    struct CellRef { short i, j, k, b; };
     static CellRef vis[16000];
     int nvis = 0;
+
+    /* Projected size scales with 1/|eye z|, and fog depth is |eye z| too, so
+     * view depth (not Euclidean distance) is the right LOD metric.  By the
+     * first threshold fog has already dimmed cells noticeably. */
+    const float lodNear = dLod ? 0.45f * theCamera->farplane : 1e9f;
+    const float lodFar  = dLod ? 0.70f * theCamera->farplane : 1e9f;
 
     float tv0 = (float)(globalxyz[0] - g_drawDepth) - g_xyz[0];
     int mod_i = myMod(globalxyz[0] - g_drawDepth);
@@ -1061,8 +1103,11 @@ static void render_scene() {
                 };
                 if (theCamera->inViewVolume(ep, 0.9f)) {
                     int t = (int)latticeGrid[mod_i][mod_j][mod_k];
-                    if (g_obj_vcount[t] > 0 && nvis < 16000) {
-                        vis[nvis++] = {(short)i,(short)j,(short)k,(short)t};
+                    if (g_obj_icount[t][0] > 0 && nvis < 16000) {
+                        float dz = -ep[2];   /* view depth (eye looks down -z) */
+                        int lod = (dz > lodFar) ? 2 : (dz > lodNear) ? 1 : 0;
+                        vis[nvis++] = {(short)i,(short)j,(short)k,
+                                       (short)(t*NUM_LODS + lod)};
                     }
                 }
                 tv2 += 1.0f;
@@ -1079,20 +1124,22 @@ static void render_scene() {
     }
     if (nvis == 0) return;
 
-    /* --- Pass 2: count instances per object type, then fill instance buffer */
-    int type_cnt[NUMOBJECTS]   = {};
-    for (int v = 0; v < nvis; v++) type_cnt[vis[v].t]++;
+    /* --- Pass 2: count instances per (object type, LOD) bucket, then fill
+     * the instance buffer grouped by bucket */
+    enum { NBUCKETS = NUMOBJECTS * NUM_LODS };
+    int type_cnt[NBUCKETS] = {};
+    for (int v = 0; v < nvis; v++) type_cnt[vis[v].b]++;
 
-    int type_start[NUMOBJECTS+1];
+    int type_start[NBUCKETS+1];
     type_start[0] = 0;
-    for (int t = 0; t < NUMOBJECTS; t++) type_start[t+1] = type_start[t] + type_cnt[t];
-    int total = type_start[NUMOBJECTS];
+    for (int b = 0; b < NBUCKETS; b++) type_start[b+1] = type_start[b] + type_cnt[b];
+    int total = type_start[NBUCKETS];
 
     static short inst_data[16000][3];
-    int fill[NUMOBJECTS] = {};
+    int fill[NBUCKETS] = {};
     for (int v = 0; v < nvis; v++) {
-        int t   = vis[v].t;
-        int idx = type_start[t] + fill[t]++;
+        int b   = vis[v].b;
+        int idx = type_start[b] + fill[b]++;
         inst_data[idx][0] = vis[v].i;
         inst_data[idx][1] = vis[v].j;
         inst_data[idx][2] = vis[v].k;
@@ -1125,15 +1172,17 @@ static void render_scene() {
     /* Bind IBO — stays bound for all instanced draw calls below */
     fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_all_ibo);
 
-    /* --- One instanced draw per non-empty object type (~20 calls max) */
-    for (int t = 0; t < NUMOBJECTS; t++) {
-        if (type_cnt[t] == 0 || g_obj_icount[t] == 0) continue;
+    /* --- One instanced draw per non-empty (object type, LOD) bucket */
+    for (int b = 0; b < NBUCKETS; b++) {
+        if (type_cnt[b] == 0) continue;
+        int t = b / NUM_LODS, L = b % NUM_LODS;
+        if (g_obj_icount[t][L] == 0) continue;
         fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
         fn_VertexAttribPointer(4, 3, GL_SHORT, GL_FALSE, sizeof(short) * 3,
-                               (const void *)(ptrdiff_t)(type_start[t] * sizeof(short) * 3));
-        fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t], GL_UNSIGNED_INT,
-                                 (const void *)(ptrdiff_t)(g_obj_istart[t] * (int)sizeof(unsigned int)),
-                                 type_cnt[t]);
+                               (const void *)(ptrdiff_t)(type_start[b] * sizeof(short) * 3));
+        fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t][L], GL_UNSIGNED_INT,
+                                 (const void *)(ptrdiff_t)(g_obj_istart[t][L] * (int)sizeof(unsigned int)),
+                                 type_cnt[b]);
     }
 
     fn_DisableVertexAttribArray(0);
@@ -1737,6 +1786,8 @@ int main(int argc, char *argv[]) {
         else if (!strcmp(argv[i],"--no-smooth"))              dSmooth    = false;
         else if (!strcmp(argv[i],"--fog"))                    dFog       = true;
         else if (!strcmp(argv[i],"--no-fog"))                 dFog       = false;
+        else if (!strcmp(argv[i],"--lod"))                    dLod       = true;
+        else if (!strcmp(argv[i],"--no-lod"))                 dLod       = false;
         else if (!strcmp(argv[i],"--fullscreen") || !strcmp(argv[i],"-fullscreen")) {
             g_start_fullscreen = 1;
         }
@@ -1748,6 +1799,7 @@ int main(int argc, char *argv[]) {
                 "Usage: %s [--preset NAME] [--speed N] [--depth N] [--density N]\n"
                 "          [--thick N] [--fov N] [--longitude N] [--latitude N]\n"
                 "          [--pathrand N] [--smooth|--no-smooth] [--fog|--no-fog]\n"
+                "          [--lod|--no-lod]\n"
                 "          [--fullscreen|-fullscreen] [--benchmark|-benchmark]\n"
                 "Presets: regular  chainmail  brassmesh  computer  slick  tasty\n",
                 argv[0]);
