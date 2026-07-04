@@ -254,8 +254,26 @@ static float       g_sim_accum = 0.0f;
 static rsTimer     g_wall_timer;
 
 /* --- Substrate Core Logic --- */
+static int dirty_min_x = 0;
+static int dirty_max_x = -1; // -1 means clean
+static int dirty_min_y = 0;
+static int dirty_max_y = -1;
+
+static inline void mark_dirty(int x, int y) {
+    if (dirty_max_x == -1) {
+        dirty_min_x = dirty_max_x = x;
+        dirty_min_y = dirty_max_y = y;
+    } else {
+        if (x < dirty_min_x) dirty_min_x = x;
+        if (x > dirty_max_x) dirty_max_x = x;
+        if (y < dirty_min_y) dirty_min_y = y;
+        if (y > dirty_max_y) dirty_max_y = y;
+    }
+}
+
 static inline uint32_t trans_point(int x, int y, uint32_t myc, float a, field *f) {
     if (x >= 0 && x < (int)f->width && y >= 0 && y < (int)f->height) {
+        mark_dirty(x, y);
         if (a >= 1.0f) {
             f->off_img[y * f->width + x] = myc;
             return myc;
@@ -439,6 +457,10 @@ static void clear_img(field *f) {
     for (unsigned int i = 0; i < f->width * f->height; i++) {
         f->off_img[i] = f->bgcolor;
     }
+    dirty_min_x = 0;
+    dirty_max_x = f->width - 1;
+    dirty_min_y = 0;
+    dirty_max_y = f->height - 1;
 }
 
 static inline void movedrawcrack(struct field *f, int cracknum) {
@@ -474,6 +496,7 @@ static inline void movedrawcrack(struct field *f, int cracknum) {
         if (!f->wireframe)
             region_color(f, cr);
 
+        mark_dirty(cx, cy);
         f->off_img[cy * f->width + cx] = f->fgcolor;
 
         if (cr->curved && (cr->degrees_drawn > 360.0f)) {
@@ -683,7 +706,20 @@ static void render_scene() {
 
     // Upload CPU pixels to the texture
     glBindTexture(GL_TEXTURE_2D, g_tex_id);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, g_field->width, g_field->height, GL_RGBA, GL_UNSIGNED_BYTE, g_field->off_img);
+    if (dirty_max_x >= 0) {
+        int w = dirty_max_x - dirty_min_x + 1;
+        int h = dirty_max_y - dirty_min_y + 1;
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, g_field->width);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, dirty_min_x);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, dirty_min_y);
+        
+        glTexSubImage2D(GL_TEXTURE_2D, 0, dirty_min_x, dirty_min_y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, g_field->off_img);
+        
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        dirty_max_x = -1;
+    }
 
     fn_UseProgram(g_prog);
     glActiveTexture(GL_TEXTURE0);
