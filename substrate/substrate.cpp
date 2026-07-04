@@ -109,6 +109,7 @@ static int dSandGrains = 64;
 static int dCirclePercent = 33;
 static const char *dBgColorStr = "white";
 static const char *dFgColorStr = "black";
+static float dSpeed = 0.5f;
 
 static field *g_field = nullptr;
 
@@ -1181,7 +1182,7 @@ static void render_frame() {
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
 
-    float real_dt = (float)g_wall_timer.tick();
+    float real_dt = (float)g_wall_timer.tick() * dSpeed;
     g_sim_accum += real_dt;
     if (g_sim_accum > 4.0f * SIM_DT)
         g_sim_accum = 4.0f * SIM_DT;
@@ -1274,6 +1275,8 @@ int main(int argc, char *argv[]) {
             dBgColorStr = argv[++i];
         } else if (!strcmp(argv[i], "--fg") && i + 1 < argc) {
             dFgColorStr = argv[++i];
+        } else if (!strcmp(argv[i], "--speed") && i + 1 < argc) {
+            dSpeed = atof(argv[++i]);
         } else if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-fullscreen")) {
             g_start_fullscreen = 1;
         } else if (!strcmp(argv[i], "--benchmark") || !strcmp(argv[i], "-benchmark")) {
@@ -1291,6 +1294,7 @@ int main(int argc, char *argv[]) {
                 "  --circle-percent <N>    (default 33)\n"
                 "  --bg <color>            (default white)\n"
                 "  --fg <color>            (default black)\n"
+                "  --speed <float>         (default 0.5)\n"
                 "  --fullscreen            \n"
                 "  --benchmark             \n",
                 argv[0]);
