@@ -233,7 +233,8 @@ void main() {
 - `u_fog`, `u_fog0`, `u_fog1`: from dFog, dDepth settings
 - `u_ldir`: compute each frame → `(rotMat_upper3x3 * light_world_dir) / length`
 
-**Projection matrix:** build manually (same formula as gluPerspective, column-major).
+**Projection matrix:** build manually (like gluPerspective but with dFov as the
+*horizontal* angle — original lattice convention — column-major).
 Store in `g_proj_mat[16]`, upload each frame via `glUniformMatrix4fv`.
 
 **MV matrix per frame:**

@@ -813,8 +813,8 @@ static void setupProjection(int w, int h) {
     float mat[16];
     float f = cosf((float)dFov * 0.5f * D2R) / sinf((float)dFov * 0.5f * D2R);
     memset(mat, 0, sizeof(mat));
-    mat[0]  = f / aspectRatio;   /* dFov is vertical FOV; horizontal widens with aspect ratio */
-    mat[5]  = f;
+    mat[0]  = f;                 /* dFov is horizontal FOV (original lattice convention); */
+    mat[5]  = f * aspectRatio;   /* vertical narrows with aspect ratio */
     mat[10] = -1.0f - 0.02f / (float)dDepth;
     mat[11] = -1.0f;
     mat[14] = -(0.02f + 0.0002f / (float)dDepth);
@@ -881,10 +881,9 @@ static void update_physics() {
     if (g_flymode) g_quat.preMult(newQuat);
     else           g_quat.postMult(newQuat);
 
-    /* Roll — direct assignment matches original; cap reduced ~37% to compensate
-     * for the wider FOV making angular motion appear proportionally faster.
-     * Acceleration is scaled to keep the same ~4-second ramp time as original. */
-    const float rollCap = 0.025f * (float)dSpeed;  /* ← tune to adjust max roll speed */
+    /* Roll — cap and acceleration match the original exactly:
+     * cap 0.04*dSpeed, rollAcc = rsRandf(0.02*dSpeed) - 0.01*dSpeed. */
+    const float rollCap = 0.04f * (float)dSpeed;  /* ← tune to adjust max roll speed */
     g_rollChange -= frameTime;
     if (g_rollChange <= 0.0f) {
         g_rollAcc    = rsRandf(0.5f * rollCap) - 0.25f * rollCap;  /* ~4s to cap at max */

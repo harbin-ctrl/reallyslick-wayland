@@ -69,7 +69,7 @@ Cycle presets at runtime with the **← →** arrow keys.
 | `--depth N` | 1–10 | Draw depth (lattice cells ahead/behind) |
 | `--density N` | 1–100 | Ring density per cell |
 | `--thick N` | 1–100 | Ring tube thickness |
-| `--fov N` | 10–150 | Vertical field of view in degrees |
+| `--fov N` | 10–150 | Horizontal field of view in degrees |
 | `--longitude N` | 4–100 | Torus longitude segments |
 | `--latitude N` | 2–100 | Torus latitude segments |
 | `--pathrand N` | 1–10 | Path randomness |
@@ -97,6 +97,7 @@ sudo make uninstall
 - Frame pacing uses `wl_surface_frame` callbacks.  Physics run at a fixed
   60 fps equivalent regardless of display refresh rate, matching the feel of
   the original screensaver on period hardware.
-- The projection matrix uses the vertical FOV convention (same as
-  `gluPerspective`), so `--fov` sets the vertical angle and the horizontal
-  angle widens automatically with the screen's aspect ratio.
+- The projection matrix uses the horizontal FOV convention of the original
+  lattice screensaver (unlike `gluPerspective`, which is vertical): `--fov`
+  sets the horizontal angle and the vertical angle narrows automatically
+  with the screen's aspect ratio.
