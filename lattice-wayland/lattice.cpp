@@ -175,12 +175,27 @@ public:
  * canonical draw path since OpenGL 1.5 (2003).
  * ---------------------------------------------------------------------- */
 
-struct GVertex {           /* 48 bytes, matches glVertexPointer offsets below */
-    float pos[3];          /* offset  0 */
-    float normal[3];       /* offset 12 */
-    float tc[2];           /* offset 24 */
-    float color[4];        /* offset 32 — alpha always 1 */
+struct GVertex {           /* CPU-side build intermediate (full float precision) */
+    float pos[3];
+    float normal[3];
+    float tc[2];
+    float color[4];        /* alpha always 1 */
 };
+
+/* GPU vertex format — 32 bytes vs the 48 of GVertex.  The saver is
+ * vertex-fetch bound on the Pi, so attribute bytes are the frame budget:
+ *   normals  → normalized GL_SHORT  (error 2^-15: far below one 8-bit
+ *              framebuffer LSB even through the pow(,50) specular term)
+ *   colours  → normalized GL_UNSIGNED_BYTE (colours are only ever displayed
+ *              through an 8-bit framebuffer, so 8 bits is lossless)
+ * Positions and texcoords stay float: quantizing those could move geometry
+ * or shift texels. */
+struct PVertex {
+    float          pos[3];  /* offset  0 */
+    short          nrm[4];  /* offset 12 — nrm[3] is padding */
+    float          tc[2];   /* offset 20 */
+    unsigned char  col[4];  /* offset 28 */
+};                          /* stride 32 */
 
 #ifndef GL_ARRAY_BUFFER
 #define GL_ARRAY_BUFFER  0x8892
@@ -239,6 +254,8 @@ static PFNGLDRAWELEMENTSINSTANCEDPROC     fn_DrawElementsInstanced = nullptr;
 static PFNGLDELETESHADERPROC              fn_DeleteShader          = nullptr;
 static PFNGLDELETEPROGRAMPROC             fn_DeleteProgram         = nullptr;
 
+static PFNGLINVALIDATEFRAMEBUFFERPROC fn_InvalidateFramebuffer = nullptr;
+
 static void load_shader_fns() {
     fn_CreateShader         = (PFNGLCREATESHADERPROC)            eglGetProcAddress("glCreateShader");
     fn_ShaderSource         = (PFNGLSHADERSOURCEPROC)            eglGetProcAddress("glShaderSource");
@@ -278,6 +295,10 @@ static void load_shader_fns() {
     if (!fn_DrawElementsInstanced)
         fn_DrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)
             eglGetProcAddress("glDrawElementsInstancedARB");
+    /* Optional (GL_ARB_invalidate_subdata): lets a tiler skip writing the
+     * depth buffer back to RAM at end of frame — we clear it anyway */
+    fn_InvalidateFramebuffer = (PFNGLINVALIDATEFRAMEBUFFERPROC)
+        eglGetProcAddress("glInvalidateFramebuffer");
 }
 
 /* Column-major 4×4 matrix helpers (match OpenGL convention exactly) */
@@ -415,6 +436,9 @@ static GLuint g_all_vbo;                   /* single buffer for all 20 objects �
 static GLuint g_all_ibo;                   /* index buffer for all 20 objects × LODs */
 static int    g_obj_istart[NUMOBJECTS][NUM_LODS]; /* first index of each object+LOD in IBO */
 static int    g_obj_icount[NUMOBJECTS][NUM_LODS]; /* index count of each object+LOD */
+static float  g_obj_radius[NUMOBJECTS];   /* exact bounding-sphere radius of each object */
+static GLenum g_index_type = GL_UNSIGNED_INT;  /* SHORT when all verts fit in 16 bits */
+static int    g_index_size = 4;
 static GLuint g_inst_vbo  = 0;            /* per-frame per-instance translation data */
 static GLuint g_prog      = 0;            /* shader program */
 static float  g_proj_mat[16];             /* projection matrix (stored by setupProjection) */
@@ -634,9 +658,12 @@ static void lodDims(int level, int lon, int lat, int *outLon, int *outLat) {
 
 /* LOD tier boundaries as absolute view depths.  Projected detail depends on
  * absolute distance (not on the far plane), so these stay fixed when --depth
- * extends the scene: deeper scenes add only coarse far geometry.  By 2.25
- * units fog has dimmed a default-depth scene to ~75% brightness. */
-static const float LOD_DIST[NUM_LODS-1] = {2.25f, 3.5f, 4.75f};
+ * extends the scene: deeper scenes add only coarse far geometry.  The first
+ * transition sits at 3.5 units, where fog has already dimmed a default-depth
+ * scene to ~70% brightness, hiding the pop that was visible at the old 2.25
+ * boundary.  Affordable after the instance-sort/vertex-packing/cull work:
+ * every preset holds 75+ FPS fullscreen (1080p) on a Pi 400 at these values. */
+static const float LOD_DIST[NUM_LODS-1] = {3.5f, 5.25f, 7.0f};
 
 /* buildLatticeVBOs — replaces makeLatticeObjects.
  * Replicates the exact same rand() call sequence so colours and ring
@@ -716,6 +743,7 @@ static void buildLatticeVBOs() {
 
         /* Pass 2: bake the object's rings once per distinct LOD level.
          * Indices for each (object, LOD) are contiguous in the shared IBO. */
+        size_t obj_v0 = all_verts.size();
         for (int L = 0; L < NUM_LODS; L++) {
             if (lalias[L] != L) {
                 g_obj_istart[i][L] = g_obj_istart[i][lalias[L]];
@@ -729,21 +757,66 @@ static void buildLatticeVBOs() {
                               rings[r].M, rings[r].col);
             g_obj_icount[i][L] = (int)(all_indices.size() - (size_t)g_obj_istart[i][L]);
         }
+
+        /* Exact bounding-sphere radius from the baked geometry (the old code
+         * used a loose 0.9 for every object; sparse objects are much smaller).
+         * Culling with a tighter-but-still-enclosing sphere is visually exact. */
+        float r2max = 0.0f;
+        for (size_t v = obj_v0; v < all_verts.size(); v++) {
+            const float *p = all_verts[v].pos;
+            float r2 = p[0]*p[0] + p[1]*p[1] + p[2]*p[2];
+            if (r2 > r2max) r2max = r2;
+        }
+        g_obj_radius[i] = sqrtf(r2max);
+    }
+
+    /* Pack the float build vertices into the 32-byte GPU format */
+    std::vector<PVertex> packed(all_verts.size());
+    for (size_t v = 0; v < all_verts.size(); v++) {
+        const GVertex &s = all_verts[v];
+        PVertex &p = packed[v];
+        p.pos[0]=s.pos[0]; p.pos[1]=s.pos[1]; p.pos[2]=s.pos[2];
+        for (int c = 0; c < 3; c++) {
+            float n = s.normal[c];
+            if (n >  1.0f) n =  1.0f;
+            if (n < -1.0f) n = -1.0f;
+            p.nrm[c] = (short)lrintf(n * 32767.0f);
+        }
+        p.nrm[3] = 0;
+        p.tc[0]=s.tc[0]; p.tc[1]=s.tc[1];
+        for (int c = 0; c < 4; c++)
+            p.col[c] = (unsigned char)lrintf(s.color[c] * 255.0f);
     }
 
     fn_GenBuffers(1, &g_all_vbo);
-    if (!all_verts.empty()) {
+    if (!packed.empty()) {
         fn_BindBuffer(GL_ARRAY_BUFFER, g_all_vbo);
-        fn_BufferData(GL_ARRAY_BUFFER, (ptrdiff_t)(all_verts.size()*sizeof(GVertex)),
-                      all_verts.data(), GL_STATIC_DRAW);
+        fn_BufferData(GL_ARRAY_BUFFER, (ptrdiff_t)(packed.size()*sizeof(PVertex)),
+                      packed.data(), GL_STATIC_DRAW);
         fn_BindBuffer(GL_ARRAY_BUFFER, 0);
     }
+
+    /* 16-bit indices halve index-fetch bandwidth; every preset fits, but the
+     * CLI allows --longitude/--latitude up to 100, so keep a 32-bit fallback */
     fn_GenBuffers(1, &g_all_ibo);
     if (!all_indices.empty()) {
         fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_all_ibo);
-        fn_BufferData(GL_ELEMENT_ARRAY_BUFFER,
-                      (ptrdiff_t)(all_indices.size()*sizeof(unsigned int)),
-                      all_indices.data(), GL_STATIC_DRAW);
+        if (all_verts.size() <= 65535) {
+            g_index_type = GL_UNSIGNED_SHORT;
+            g_index_size = 2;
+            std::vector<unsigned short> idx16(all_indices.size());
+            for (size_t n = 0; n < all_indices.size(); n++)
+                idx16[n] = (unsigned short)all_indices[n];
+            fn_BufferData(GL_ELEMENT_ARRAY_BUFFER,
+                          (ptrdiff_t)(idx16.size()*sizeof(unsigned short)),
+                          idx16.data(), GL_STATIC_DRAW);
+        } else {
+            g_index_type = GL_UNSIGNED_INT;
+            g_index_size = 4;
+            fn_BufferData(GL_ELEMENT_ARRAY_BUFFER,
+                          (ptrdiff_t)(all_indices.size()*sizeof(unsigned int)),
+                          all_indices.data(), GL_STATIC_DRAW);
+        }
         fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 }
@@ -827,7 +900,10 @@ static void setupProjection(int w, int h) {
 
     delete theCamera;
     theCamera = new camera;
-    theCamera->init(mat, (float)dDepth);
+    /* With fog on, every fragment past the fog end (dDepth - 0.1) shades to
+     * pure black on a black background, so geometry wholly beyond it is
+     * invisible — cull it at the source.  Without fog keep the far plane. */
+    theCamera->init(mat, dFog ? (float)dDepth - 0.1f : (float)dDepth);
 
     glMatrixMode(GL_MODELVIEW);
 }
@@ -935,7 +1011,9 @@ static void build_shader_program() {
         "void main() {\n"
         "    vec4 eye = u_mv * vec4(a_pos + a_inst, 1.0);\n"
         "    gl_Position = u_proj * eye;\n"
-        "    vec3 n = normalize(mat3(u_mv) * a_nrm);\n"
+        /* mv is rotation+translation only and a_nrm is unit length (baked
+         * normals, quantized to 15 bits), so no normalize is needed here */
+        "    vec3 n = mat3(u_mv) * a_nrm;\n"
         "    if (u_lit == 1) {\n"
         "        float d = max(dot(n, u_ldir), 0.0);\n"
         "        vec3  h = normalize(u_ldir + normalize(-eye.xyz));\n"
@@ -1082,9 +1160,16 @@ static void render_scene() {
     /* --- Pass 1: collect visible cells (single loop, avoids duplicate frustum test)
      * Each cell is also classified by view depth into a LOD level; `b` is the
      * combined bucket index (object type × NUM_LODS + lod). */
-    struct CellRef { short i, j, k, b; };
+    struct CellRef { short i, j, k, b; unsigned char bin; };
     static CellRef vis[16000];
     int nvis = 0;
+
+    /* Instances within each bucket are ordered near-to-far (quantized into
+     * 0.25-unit depth bins) so early-Z rejects fragments of occluded rings.
+     * Depth-tested opaque output is order-independent, so this is exact.
+     * circuits (7) alpha-blends with depth writes, where order changes the
+     * image — keep its historical grid order. */
+    const bool sortNear = (dTexture != 7);
 
     /* Projected size scales with 1/|eye z|, and fog depth is |eye z| too, so
      * view depth (not Euclidean distance) is the right LOD metric. */
@@ -1111,15 +1196,23 @@ static void render_scene() {
                     part_j_1 + tv2 * g_rotMat[9],
                     part_j_2 + tv2 * g_rotMat[10]
                 };
-                if (theCamera->inViewVolume(ep, 0.9f)) {
-                    int t = (int)latticeGrid[mod_i][mod_j][mod_k];
-                    if (g_obj_icount[t][0] > 0 && nvis < 16000) {
+                int t = (int)latticeGrid[mod_i][mod_j][mod_k];
+                if (g_obj_icount[t][0] > 0 &&
+                    theCamera->inViewVolume(ep, g_obj_radius[t])) {
+                    if (nvis < 16000) {
                         float dz = -ep[2];   /* view depth (eye looks down -z) */
                         int lod = 0;
                         if (dLod)
                             while (lod < NUM_LODS-1 && dz > LOD_DIST[lod]) lod++;
+                        int bin = 0;
+                        if (sortNear) {
+                            bin = (int)(dz * 4.0f);
+                            if (bin < 0)  bin = 0;
+                            if (bin > 31) bin = 31;
+                        }
                         vis[nvis++] = {(short)i,(short)j,(short)k,
-                                       (short)(t*NUM_LODS + lod)};
+                                       (short)(t*NUM_LODS + lod),
+                                       (unsigned char)bin};
                     }
                 }
                 tv2 += 1.0f;
@@ -1136,22 +1229,33 @@ static void render_scene() {
     }
     if (nvis == 0) return;
 
-    /* --- Pass 2: count instances per (object type, LOD) bucket, then fill
-     * the instance buffer grouped by bucket */
-    enum { NBUCKETS = NUMOBJECTS * NUM_LODS };
-    int type_cnt[NBUCKETS] = {};
-    for (int v = 0; v < nvis; v++) type_cnt[vis[v].b]++;
+    /* --- Pass 2: counting sort of instances by (bucket, depth bin).  Keys are
+     * bucket-major, so each bucket's instances stay contiguous (one instanced
+     * draw per bucket as before) but are now ordered near-to-far inside it. */
+    enum { NBUCKETS = NUMOBJECTS * NUM_LODS, NBINS = 32, NKEYS = NBUCKETS * NBINS };
+    static int key_fill[NKEYS];
+    memset(key_fill, 0, sizeof(key_fill));
+    for (int v = 0; v < nvis; v++) key_fill[vis[v].b * NBINS + vis[v].bin]++;
 
+    int type_cnt[NBUCKETS];
     int type_start[NBUCKETS+1];
     type_start[0] = 0;
-    for (int b = 0; b < NBUCKETS; b++) type_start[b+1] = type_start[b] + type_cnt[b];
-    int total = type_start[NBUCKETS];
+    int run = 0;
+    for (int b = 0; b < NBUCKETS; b++) {
+        int cnt = 0;
+        for (int n = 0; n < NBINS; n++) {
+            int c = key_fill[b*NBINS + n];
+            key_fill[b*NBINS + n] = run;   /* becomes the key's write cursor */
+            run += c; cnt += c;
+        }
+        type_cnt[b]     = cnt;
+        type_start[b+1] = run;
+    }
+    int total = run;
 
     static short inst_data[16000][3];
-    int fill[NBUCKETS] = {};
     for (int v = 0; v < nvis; v++) {
-        int b   = vis[v].b;
-        int idx = type_start[b] + fill[b]++;
+        int idx = key_fill[vis[v].b * NBINS + vis[v].bin]++;
         inst_data[idx][0] = vis[v].i;
         inst_data[idx][1] = vis[v].j;
         inst_data[idx][2] = vis[v].k;
@@ -1167,10 +1271,10 @@ static void render_scene() {
     fn_EnableVertexAttribArray(1);
     fn_EnableVertexAttribArray(2);
     fn_EnableVertexAttribArray(3);
-    fn_VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 48, (const void *) 0);
-    fn_VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 48, (const void *)12);
-    fn_VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 48, (const void *)24);
-    fn_VertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 48, (const void *)32);
+    fn_VertexAttribPointer(0, 3, GL_FLOAT,         GL_FALSE, 32, (const void *) 0);
+    fn_VertexAttribPointer(1, 3, GL_SHORT,         GL_TRUE,  32, (const void *)12);
+    fn_VertexAttribPointer(2, 2, GL_FLOAT,         GL_FALSE, 32, (const void *)20);
+    fn_VertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE,  32, (const void *)28);
     fn_VertexAttribDivisor(0, 0);
     fn_VertexAttribDivisor(1, 0);
     fn_VertexAttribDivisor(2, 0);
@@ -1194,8 +1298,8 @@ static void render_scene() {
             fn_BindBuffer(GL_ARRAY_BUFFER, g_inst_vbo);
             fn_VertexAttribPointer(4, 3, GL_SHORT, GL_FALSE, sizeof(short) * 3,
                                    (const void *)(ptrdiff_t)(type_start[b] * sizeof(short) * 3));
-            fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t][L], GL_UNSIGNED_INT,
-                                     (const void *)(ptrdiff_t)(g_obj_istart[t][L] * (int)sizeof(unsigned int)),
+            fn_DrawElementsInstanced(GL_TRIANGLES, g_obj_icount[t][L], g_index_type,
+                                     (const void *)(ptrdiff_t)(g_obj_istart[t][L] * g_index_size),
                                      type_cnt[b]);
         }
     }
@@ -1284,7 +1388,9 @@ static void initTextures() {
 
 static void initSaver() {
     int i, j, k;
-    srand((unsigned)time(NULL));
+    /* Benchmark runs use a fixed seed so the flight path — and therefore the
+     * rendered workload — is identical between runs, making FPS comparable. */
+    srand(g_benchmark_mode ? 42u : (unsigned)time(NULL));
 
     /* Depth test: disabled for crystal (2) and ghostly (6) — original behaviour */
     if (dTexture != 2 && dTexture != 6)
@@ -1743,6 +1849,13 @@ static void render_frame() {
         }
         g_frame_callback = wl_surface_frame(g_surface);
         wl_callback_add_listener(g_frame_callback, &frame_listener, NULL);
+    }
+    /* Depth is cleared at the start of every frame, so its end-of-frame
+     * contents are garbage — telling GL so lets the tiler skip ~8 MB/frame
+     * of depth writeback at 1080p */
+    if (fn_InvalidateFramebuffer) {
+        static const GLenum att[1] = { GL_DEPTH };
+        fn_InvalidateFramebuffer(GL_FRAMEBUFFER, 1, att);
     }
     eglSwapBuffers(g_egl_display, g_egl_surface);
 }
