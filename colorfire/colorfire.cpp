@@ -23,7 +23,6 @@
 #include <wayland-egl.h>
 #include <EGL/egl.h>
 #include <GL/gl.h>
-#include <GL/glu.h>
 #include <GL/glext.h>
 
 #include "xdg-shell-client-protocol.h"
@@ -141,6 +140,12 @@ static PFNGLDISABLEVERTEXATTRIBARRAYPROC  fn_DisableVertexAttribArray = nullptr;
 static PFNGLVERTEXATTRIBPOINTERPROC       fn_VertexAttribPointer   = nullptr;
 static PFNGLDELETESHADERPROC              fn_DeleteShader          = nullptr;
 static PFNGLDELETEPROGRAMPROC             fn_DeleteProgram         = nullptr;
+static PFNGLGENERATEMIPMAPPROC            fn_GenerateMipmap        = nullptr;
+static PFNGLGENFRAMEBUFFERSPROC           fn_GenFramebuffers       = nullptr;
+static PFNGLBINDFRAMEBUFFERPROC           fn_BindFramebuffer       = nullptr;
+static PFNGLFRAMEBUFFERTEXTURE2DPROC      fn_FramebufferTexture2D  = nullptr;
+static PFNGLCHECKFRAMEBUFFERSTATUSPROC    fn_CheckFramebufferStatus= nullptr;
+static PFNGLDELETEFRAMEBUFFERSPROC        fn_DeleteFramebuffers    = nullptr;
 
 static void load_shader_fns() {
     fn_CreateShader         = (PFNGLCREATESHADERPROC)            eglGetProcAddress("glCreateShader");
@@ -164,6 +169,12 @@ static void load_shader_fns() {
     fn_VertexAttribPointer  = (PFNGLVERTEXATTRIBPOINTERPROC)     eglGetProcAddress("glVertexAttribPointer");
     fn_DeleteShader         = (PFNGLDELETESHADERPROC)            eglGetProcAddress("glDeleteShader");
     fn_DeleteProgram        = (PFNGLDELETEPROGRAMPROC)           eglGetProcAddress("glDeleteProgram");
+    fn_GenerateMipmap       = (PFNGLGENERATEMIPMAPPROC)          eglGetProcAddress("glGenerateMipmap");
+    fn_GenFramebuffers      = (PFNGLGENFRAMEBUFFERSPROC)         eglGetProcAddress("glGenFramebuffers");
+    fn_BindFramebuffer      = (PFNGLBINDFRAMEBUFFERPROC)         eglGetProcAddress("glBindFramebuffer");
+    fn_FramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)    eglGetProcAddress("glFramebufferTexture2D");
+    fn_CheckFramebufferStatus=(PFNGLCHECKFRAMEBUFFERSTATUSPROC)  eglGetProcAddress("glCheckFramebufferStatus");
+    fn_DeleteFramebuffers   = (PFNGLDELETEFRAMEBUFFERSPROC)      eglGetProcAddress("glDeleteFramebuffers");
 }
 
 /* -------------------------------------------------------------------------
@@ -185,6 +196,19 @@ static GLuint g_tex_id   = 0;
 
 static float g_proj_mat[16];
 static GLint g_u_proj, g_u_mv, g_u_color, g_u_tex_mode;
+
+static int g_win_width  = 800;
+static int g_win_height = 600;
+
+/* Low-res accumulation buffer: the scene is soft additive blobs, so it can
+ * be shaded at reduced resolution and upscaled without visible change. */
+static float  g_render_scale = 0.5f;
+static GLuint g_fbo          = 0;
+static GLuint g_fbo_tex      = 0;
+static int    g_fbo_w = 0, g_fbo_h = 0;
+static bool   g_fbo_float    = false;
+static GLuint g_present_prog = 0;
+static GLuint g_present_vbo  = 0;
 
 static void initWave (int nr) {
     wtime[nr] = 0;
@@ -221,6 +245,34 @@ static void setupProjection(int w, int h) {
  * Texture Setup
  * ---------------------------------------------------------------------- */
 
+/* Upsample a grayscale map 2x with the Quilez smoothstep-weighted bilinear
+ * filter (wrapping edges). Baking the smoothing into the texture once lets
+ * the fragment shader use plain trilinear sampling instead of doing the
+ * filter math per fragment. Source is RGB data with equal channels. */
+static std::vector<unsigned char> upsample2xSmooth(const unsigned char *src, int sw) {
+    const int dw = sw * 2;
+    std::vector<unsigned char> dst((size_t)dw * dw);
+    for (int y = 0; y < dw; y++) {
+        float v = (y + 0.5f) * 0.5f - 0.5f;
+        int j0 = (int)floorf(v);
+        float fy = v - j0;
+        float wy = fy * fy * (3.0f - 2.0f * fy);
+        int ja = ((j0 % sw) + sw) % sw, jb = (ja + 1) % sw;
+        for (int x = 0; x < dw; x++) {
+            float u = (x + 0.5f) * 0.5f - 0.5f;
+            int i0 = (int)floorf(u);
+            float fx = u - i0;
+            float wx = fx * fx * (3.0f - 2.0f * fx);
+            int ia = ((i0 % sw) + sw) % sw, ib = (ia + 1) % sw;
+            float t00 = src[(ja * sw + ia) * 3], t10 = src[(ja * sw + ib) * 3];
+            float t01 = src[(jb * sw + ia) * 3], t11 = src[(jb * sw + ib) * 3];
+            float t = t00 + (t10 - t00) * wx + ((t01 + (t11 - t01) * wx) - (t00 + (t10 - t00) * wx)) * wy;
+            dst[(size_t)y * dw + x] = (unsigned char)(t + 0.5f);
+        }
+    }
+    return dst;
+}
+
 static void initTextures() {
     if (g_tex_id) glDeleteTextures(1, &g_tex_id);
     glGenTextures(1, &g_tex_id);
@@ -231,14 +283,69 @@ static void initTextures() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
-    if (dTexture == 1) {
-        gluBuild2DMipmaps(GL_TEXTURE_2D, 1, TEXSIZE, TEXSIZE, GL_RGB, GL_UNSIGNED_BYTE, (const unsigned char *)smokemap);
-    } else if (dTexture == 2) {
-        gluBuild2DMipmaps(GL_TEXTURE_2D, 1, TEXSIZE, TEXSIZE, GL_RGB, GL_UNSIGNED_BYTE, (const unsigned char *)ripplemap);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    if (dTexture == 1 || dTexture == 2) {
+        const unsigned char *map = (const unsigned char *)(dTexture == 1 ? smokemap : ripplemap);
+        std::vector<unsigned char> up = upsample2xSmooth(map, TEXSIZE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, TEXSIZE * 2, TEXSIZE * 2, 0, GL_RED, GL_UNSIGNED_BYTE, up.data());
+        fn_GenerateMipmap(GL_TEXTURE_2D);
     } else {
         unsigned char img[] = { 255 };
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, 1, 1, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, img);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, img);
     }
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR)
+        fprintf(stderr, "colorfire: texture upload error 0x%x (GL %s)\n", err, glGetString(GL_VERSION));
+}
+
+/* -------------------------------------------------------------------------
+ * Low-res accumulation framebuffer
+ * ---------------------------------------------------------------------- */
+
+static void resizeFbo(int win_w, int win_h) {
+    if (!g_fbo_tex) return;
+    int w = win_w * g_render_scale + 0.5f, h = win_h * g_render_scale + 0.5f;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (w == g_fbo_w && h == g_fbo_h) return;
+    g_fbo_w = w; g_fbo_h = h;
+    glBindTexture(GL_TEXTURE_2D, g_fbo_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, g_fbo_float ? GL_RGBA16F : GL_RGBA8,
+                 w, h, 0, GL_RGBA, g_fbo_float ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static bool initFbo(int win_w, int win_h) {
+    glGenTextures(1, &g_fbo_tex);
+    glBindTexture(GL_TEXTURE_2D, g_fbo_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    fn_GenFramebuffers(1, &g_fbo);
+
+    /* Prefer a half-float target so 24 additively blended layers accumulate
+     * without per-pass 8-bit quantization (banding). */
+    for (int attempt = 0; attempt < 2; attempt++) {
+        g_fbo_float = (attempt == 0);
+        g_fbo_w = g_fbo_h = 0;
+        resizeFbo(win_w, win_h);
+        fn_BindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+        fn_FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_fbo_tex, 0);
+        GLenum status = fn_CheckFramebufferStatus(GL_FRAMEBUFFER);
+        fn_BindFramebuffer(GL_FRAMEBUFFER, 0);
+        while (glGetError() != GL_NO_ERROR) {}
+        if (status == GL_FRAMEBUFFER_COMPLETE) {
+            fprintf(stderr, "colorfire: %dx%d %s accumulation buffer (render scale %.2f)\n",
+                    g_fbo_w, g_fbo_h, g_fbo_float ? "RGBA16F" : "RGBA8", g_render_scale);
+            return true;
+        }
+    }
+    fn_DeleteFramebuffers(1, &g_fbo);
+    glDeleteTextures(1, &g_fbo_tex);
+    g_fbo = g_fbo_tex = 0;
+    fprintf(stderr, "colorfire: offscreen framebuffer unavailable, rendering direct\n");
+    return false;
 }
 
 /* -------------------------------------------------------------------------
@@ -258,6 +365,8 @@ static void build_shader_program() {
         "    v_tc = a_tc;\n"
         "}\n";
 
+    /* Smoothing is baked into the texture at load time (upsample2xSmooth),
+     * so the textured path is a single plain trilinear fetch. */
     static const char FRAG_SRC[] =
         "#version 140\n"
         "in vec2 v_tc;\n"
@@ -265,36 +374,17 @@ static void build_shader_program() {
         "uniform sampler2D u_samp;\n"
         "uniform int u_tex_mode;\n" /* 0=None, 1=Smoke, 2=Ripples, 3=Smooth */
         "out vec4 frag;\n"
-        
-        "vec4 textureSmooth(sampler2D sampler, vec2 uv) {\n"
-        "    vec2 texSize = vec2(textureSize(sampler, 0));\n"
-        "    vec2 uv_scaled = uv * texSize;\n"
-        "    vec2 i = floor(uv_scaled - 0.5);\n"
-        "    vec2 f = fract(uv_scaled - 0.5);\n"
-        "    vec2 w = f * f * (3.0 - 2.0 * f);\n"
-        "    vec2 uv_smooth = (i + 0.5 + w) / texSize;\n"
-        "    return texture(sampler, uv_smooth);\n"
-        "}\n"
-        
         "void main() {\n"
         "    if (u_tex_mode == 3) {\n"
-        "        float dx = v_tc.x - 0.5;\n"
-        "        float dy = v_tc.y - 0.5;\n"
-        "        float dist = sqrt(dx * dx + dy * dy);\n"
-        "        float intensity = 0.0;\n"
-        "        if (dist < 0.5) {\n"
-        "            float d = 1.0 - (dist / 0.5);\n"
-        "            intensity = d * d;\n"
-        "        }\n"
-        "        frag = vec4(u_color.rgb * intensity, 1.0);\n"
+        "        float d = max(0.0, 1.0 - 2.0 * length(v_tc - 0.5));\n"
+        "        frag = vec4(u_color.rgb * (d * d), 1.0);\n"
         "    }\n"
         "    else if (u_tex_mode == 0) {\n"
         "        float intensity = mix(v_tc.x, 1.0 - v_tc.x, v_tc.y);\n"
         "        frag = vec4(u_color.rgb * intensity, 1.0);\n"
         "    }\n"
         "    else {\n"
-        "        vec4 tex = textureSmooth(u_samp, v_tc);\n"
-        "        frag = vec4(u_color.rgb * tex.rgb, 1.0);\n"
+        "        frag = vec4(u_color.rgb * texture(u_samp, v_tc).r, 1.0);\n"
         "    }\n"
         "}\n";
 
@@ -338,6 +428,70 @@ static void build_shader_program() {
     fn_Uniform1i(fn_GetUniformLocation(g_prog, "u_samp"), 0);
 }
 
+/* Fullscreen upscale pass: bilinear upsample of the low-res accumulation
+ * buffer plus a gradient-noise dither to hide 8-bit output banding in the
+ * dark ends of the gradients. */
+static void build_present_program() {
+    static const char VERT_SRC[] =
+        "#version 140\n"
+        "in vec2 a_pos;\n"
+        "out vec2 v_tc;\n"
+        "void main() {\n"
+        "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+        "    v_tc = a_pos * 0.5 + 0.5;\n"
+        "}\n";
+
+    static const char FRAG_SRC[] =
+        "#version 140\n"
+        "in vec2 v_tc;\n"
+        "uniform sampler2D u_samp;\n"
+        "out vec4 frag;\n"
+        "void main() {\n"
+        "    vec3 c = texture(u_samp, v_tc).rgb;\n"
+        "    float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
+        "    frag = vec4(c + (n - 0.5) * (1.0 / 255.0), 1.0);\n"
+        "}\n";
+
+    auto compile = [](GLenum type, const char *src) -> GLuint {
+        GLuint s = fn_CreateShader(type);
+        fn_ShaderSource(s, 1, &src, NULL);
+        fn_CompileShader(s);
+        GLint ok; fn_GetShaderiv(s, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            char log[512]; fn_GetShaderInfoLog(s, 512, NULL, log);
+            fprintf(stderr, "colorfire present shader: %s\n", log);
+        }
+        return s;
+    };
+
+    GLuint vs = compile(GL_VERTEX_SHADER,   VERT_SRC);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, FRAG_SRC);
+
+    g_present_prog = fn_CreateProgram();
+    fn_AttachShader(g_present_prog, vs);
+    fn_AttachShader(g_present_prog, fs);
+    fn_BindAttribLocation(g_present_prog, 0, "a_pos");
+    fn_LinkProgram(g_present_prog);
+
+    GLint ok; fn_GetProgramiv(g_present_prog, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[512]; fn_GetProgramInfoLog(g_present_prog, 512, NULL, log);
+        fprintf(stderr, "colorfire present link: %s\n", log);
+    }
+    fn_DeleteShader(vs);
+    fn_DeleteShader(fs);
+
+    fn_UseProgram(g_present_prog);
+    fn_Uniform1i(fn_GetUniformLocation(g_present_prog, "u_samp"), 0);
+
+    /* Fullscreen triangle */
+    static const float TRI[6] = { -1.0f, -1.0f, 3.0f, -1.0f, -1.0f, 3.0f };
+    fn_GenBuffers(1, &g_present_vbo);
+    fn_BindBuffer(GL_ARRAY_BUFFER, g_present_vbo);
+    fn_BufferData(GL_ARRAY_BUFFER, sizeof(TRI), TRI, GL_STATIC_DRAW);
+    fn_BindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
 /* -------------------------------------------------------------------------
  * OpenGL State Init
  * ---------------------------------------------------------------------- */
@@ -379,6 +533,7 @@ static void initSaver() {
 
     initTextures();
     build_shader_program();
+    build_present_program();
 }
 
 /* -------------------------------------------------------------------------
@@ -432,6 +587,13 @@ static void drawWave (int nr, float fDeltaTime, const float MV_global[16]) {
 }
 
 static void render_scene(float frameTime) {
+    /* A frame hitch shouldn't fast-forward every wave past its lifetime */
+    if (frameTime > 0.1f) frameTime = 0.1f;
+
+    if (g_fbo) {
+        fn_BindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+        glViewport(0, 0, g_fbo_w, g_fbo_h);
+    }
     glClear(GL_COLOR_BUFFER_BIT);
 
     fn_UseProgram(g_prog);
@@ -467,9 +629,23 @@ static void render_scene(float frameTime) {
         drawWave(i, frameTime, MV_global);
     }
 
-    fn_DisableVertexAttribArray(0);
     fn_DisableVertexAttribArray(1);
     fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    if (g_fbo) {
+        /* Upscale + dither to the window */
+        fn_BindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, g_win_width, g_win_height);
+        glDisable(GL_BLEND);
+        fn_UseProgram(g_present_prog);
+        glBindTexture(GL_TEXTURE_2D, g_fbo_tex);
+        fn_BindBuffer(GL_ARRAY_BUFFER, g_present_vbo);
+        fn_VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (const void*)0);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glEnable(GL_BLEND);
+    }
+
+    fn_DisableVertexAttribArray(0);
     fn_BindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
@@ -499,8 +675,6 @@ static EGLContext  g_egl_context = EGL_NO_CONTEXT;
 static EGLSurface  g_egl_surface = EGL_NO_SURFACE;
 static EGLConfig   g_egl_config;
 
-static int g_win_width    = 800;
-static int g_win_height   = 600;
 static int g_configured   = 0;
 static int g_running      = 1;
 static int g_needs_resize = 0;
@@ -522,6 +696,7 @@ static void xdg_surface_configure(void *data, struct xdg_surface *surf, uint32_t
         g_win_height = g_new_height;
         g_needs_resize = 0;
         setupProjection(g_win_width, g_win_height);
+        resizeFbo(g_win_width, g_win_height);
         render_frame();
     }
 }
@@ -691,7 +866,7 @@ static void render_frame() {
     g_perf.frame_ms_sum += frame_ms;
 
     double elapsed = (t1.tv_sec - g_perf.window_start.tv_sec) + (t1.tv_nsec - g_perf.window_start.tv_nsec) * 1e-9;
-    if (elapsed >= 1.0) {
+    if (g_benchmark_mode && elapsed >= 1.0) {
         fprintf(stderr, "FPS: %5.1f  frame: %5.2f ms\n", g_perf.frames / elapsed, g_perf.frame_ms_sum / g_perf.frames);
         perf_init();
     }
@@ -715,6 +890,7 @@ static void frame_done(void *, struct wl_callback *cb, uint32_t) {
         g_win_height = g_new_height;
         g_needs_resize = 0;
         setupProjection(g_win_width, g_win_height);
+        resizeFbo(g_win_width, g_win_height);
     }
 
     render_frame();
@@ -742,6 +918,16 @@ int main(int argc, char *argv[]) {
         else if (!strcmp(argv[i], "--benchmark") || !strcmp(argv[i], "-benchmark")) {
             g_benchmark_mode = true;
         }
+        else if (!strcmp(argv[i], "--render-scale") || !strcmp(argv[i], "-s")) {
+            if (i + 1 < argc) {
+                g_render_scale = atof(argv[++i]);
+                if (g_render_scale < 0.1f) g_render_scale = 0.1f;
+                if (g_render_scale > 1.0f) g_render_scale = 1.0f;
+            }
+        }
+        else if (!strcmp(argv[i], "--full-res")) {
+            g_render_scale = 1.0f;
+        }
         else {
             fprintf(stderr, "Usage: %s [options]\n"
                             "Options:\n"
@@ -750,7 +936,9 @@ int main(int argc, char *argv[]) {
                             "  --ripples            Short for --texture 2\n"
                             "  --smooth             Short for --texture 3\n"
                             "  --fullscreen, -fullscreen Start in fullscreen\n"
-                            "  --benchmark, -benchmark   Non-blocking benchmark mode\n", argv[0]);
+                            "  --benchmark, -benchmark   Non-blocking benchmark mode\n"
+                            "  --render-scale, -s <0.1-1.0> Internal render resolution scale (default 0.5)\n"
+                            "  --full-res           Short for --render-scale 1.0\n", argv[0]);
             return 1;
         }
     }
@@ -810,6 +998,10 @@ int main(int argc, char *argv[]) {
     load_vbo_fns();
     load_shader_fns();
     initSaver();
+    if (g_render_scale < 0.999f &&
+        fn_GenFramebuffers && fn_BindFramebuffer && fn_FramebufferTexture2D &&
+        fn_CheckFramebufferStatus && fn_DeleteFramebuffers)
+        initFbo(g_win_width, g_win_height);
     setupProjection(g_win_width, g_win_height);
 
     perf_init();
@@ -832,9 +1024,13 @@ int main(int argc, char *argv[]) {
         wl_callback_destroy(g_frame_callback);
         g_frame_callback = NULL;
     }
-    if (g_prog)     fn_DeleteProgram(g_prog);
-    if (g_quad_vbo) fn_DeleteBuffers(1, &g_quad_vbo);
-    if (g_quad_ibo) fn_DeleteBuffers(1, &g_quad_ibo);
+    if (g_prog)         fn_DeleteProgram(g_prog);
+    if (g_present_prog) fn_DeleteProgram(g_present_prog);
+    if (g_quad_vbo)     fn_DeleteBuffers(1, &g_quad_vbo);
+    if (g_quad_ibo)     fn_DeleteBuffers(1, &g_quad_ibo);
+    if (g_present_vbo)  fn_DeleteBuffers(1, &g_present_vbo);
+    if (g_fbo)          fn_DeleteFramebuffers(1, &g_fbo);
+    if (g_fbo_tex)      glDeleteTextures(1, &g_fbo_tex);
     glDeleteTextures(1, &g_tex_id);
 
     eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);

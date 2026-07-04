@@ -5,7 +5,7 @@ CXX      := g++
 CC       := gcc
 CXXFLAGS := -O2 -Wall $(shell pkg-config --cflags wayland-client wayland-egl egl gl)
 CFLAGS   := -O2 $(shell pkg-config --cflags wayland-client)
-LIBS     := $(shell pkg-config --libs wayland-client wayland-egl egl gl) -lGLU -lm
+LIBS     := $(shell pkg-config --libs wayland-client wayland-egl egl gl) -lm
 
 TARGET  := colorfire
 HEADERS := xdg-shell-client-protocol.h xdg-decoration-client-protocol.h
