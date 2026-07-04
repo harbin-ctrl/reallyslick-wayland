@@ -700,6 +700,7 @@ static void initSaver() {
     setup_texture(g_field->width, g_field->height);
     build_shader_program();
     glViewport(0, 0, g_field->width, g_field->height);
+    update_cursor_color();
 }
 
 static void handle_resize(int w, int h) {
@@ -907,6 +908,7 @@ static void update_cursor_color() {
         }
     }
     if (g_cursor_surface) {
+        wl_surface_attach(g_cursor_surface, g_cursor_buffer, 0, 0);
         wl_surface_damage(g_cursor_surface, 0, 0, 16, 16);
         wl_surface_commit(g_cursor_surface);
         if (g_pointer) {
@@ -1249,7 +1251,7 @@ int main(int argc, char *argv[]) {
     xdg_surface_add_listener(g_xdg_surface, &xdg_surface_lst, nullptr);
     g_toplevel = xdg_surface_get_toplevel(g_xdg_surface);
     xdg_toplevel_add_listener(g_toplevel, &toplevel_lst, nullptr);
-    xdg_toplevel_set_title(g_toplevel, "Substrate Screensaver");
+    xdg_toplevel_set_title(g_toplevel, "Substrate");
     xdg_toplevel_set_app_id(g_toplevel, "substrate");
 
     if (g_deco_manager) {
