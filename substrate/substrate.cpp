@@ -314,6 +314,7 @@ static float       g_sim_accum = 0.0f;
 static rsTimer     g_wall_timer;
 
 /* --- Substrate Core Logic --- */
+static bool g_force_render = true;
 static inline uint32_t trans_point(int x, int y, uint32_t myc, float a, field *f) {
     if (x >= 0 && x < (int)f->width && y >= 0 && y < (int)f->height) {
         int r, g, b;
@@ -502,6 +503,7 @@ static void clear_img(field *f) {
     glClearColor(r/255.0f, g/255.0f, b/255.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     fn_BindFramebuffer(GL_FRAMEBUFFER, 0);
+    g_force_render = true;
 }
 
 static inline void movedrawcrack(struct field *f, int cracknum) {
@@ -1190,8 +1192,9 @@ static void render_frame() {
         g_sim_accum -= SIM_DT;
         ++steps;
     }
-    if (steps > 0) {
+    if (steps > 0 || g_force_render) {
         frame_needs_render = true;
+        g_force_render = false;
     }
 
     if (frame_needs_render) {
