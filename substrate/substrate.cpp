@@ -109,7 +109,6 @@ static int dSandGrains = 64;
 static int dCirclePercent = 33;
 static const char *dBgColorStr = "white";
 static const char *dFgColorStr = "black";
-static float dSpeed = 0.5f;
 
 static field *g_field = nullptr;
 
@@ -1182,7 +1181,19 @@ static void render_frame() {
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
 
-    float real_dt = (float)g_wall_timer.tick() * dSpeed;
+    float real_dt = (float)g_wall_timer.tick();
+    
+    // Snap real_dt to common monitor refresh rates to avoid accumulator jitter
+    // which causes 0-step and 2-step stutters (the "racing" effect).
+    float fps_rates[] = { 30.0f, 60.0f, 75.0f, 90.0f, 120.0f, 144.0f, 165.0f, 240.0f };
+    for (float rate : fps_rates) {
+        float ideal = 1.0f / rate;
+        if (fabsf(real_dt - ideal) < 0.002f) {
+            real_dt = ideal;
+            break;
+        }
+    }
+
     g_sim_accum += real_dt;
     if (g_sim_accum > 4.0f * SIM_DT)
         g_sim_accum = 4.0f * SIM_DT;
@@ -1275,8 +1286,6 @@ int main(int argc, char *argv[]) {
             dBgColorStr = argv[++i];
         } else if (!strcmp(argv[i], "--fg") && i + 1 < argc) {
             dFgColorStr = argv[++i];
-        } else if (!strcmp(argv[i], "--speed") && i + 1 < argc) {
-            dSpeed = atof(argv[++i]);
         } else if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-fullscreen")) {
             g_start_fullscreen = 1;
         } else if (!strcmp(argv[i], "--benchmark") || !strcmp(argv[i], "-benchmark")) {
@@ -1294,7 +1303,6 @@ int main(int argc, char *argv[]) {
                 "  --circle-percent <N>    (default 33)\n"
                 "  --bg <color>            (default white)\n"
                 "  --fg <color>            (default black)\n"
-                "  --speed <float>         (default 0.5)\n"
                 "  --fullscreen            \n"
                 "  --benchmark             \n",
                 argv[0]);
