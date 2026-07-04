@@ -1015,13 +1015,19 @@ static void render_frame() {
     if (g_sim_accum > 4.0f * SIM_DT)
         g_sim_accum = 4.0f * SIM_DT;
     int steps = 0;
+    bool frame_needs_render = false;
     while (g_sim_accum >= SIM_DT) {
         update_physics();
         g_sim_accum -= SIM_DT;
         ++steps;
     }
+    if (dirty_max_x >= 0) {
+        frame_needs_render = true;
+    }
 
-    render_scene();
+    if (frame_needs_render) {
+        render_scene();
+    }
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
     double frame_ms = ((t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9) * 1000.0;
@@ -1048,7 +1054,11 @@ static void render_frame() {
         g_frame_callback = wl_surface_frame(g_surface);
         wl_callback_add_listener(g_frame_callback, &frame_listener, nullptr);
     }
-    eglSwapBuffers(g_egl_display, g_egl_surface);
+    if (frame_needs_render || g_benchmark_mode) {
+        eglSwapBuffers(g_egl_display, g_egl_surface);
+    } else {
+        wl_surface_commit(g_surface);
+    }
 }
 
 static void frame_done(void *, struct wl_callback *cb, uint32_t) {
