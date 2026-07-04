@@ -88,7 +88,7 @@ struct field {
     int circle_percent;
     crack *cracks; /* array of cracks */
     int *cgrid; /* grid of actual crack placement */
-    uint32_t *off_img; /* CPU backbuffer */
+    // uint32_t *off_img; removed
     int numcolors;
     uint32_t *parsedcolors;
     uint32_t fgcolor;
@@ -149,6 +149,20 @@ static PFN_BindBuffer_t    fn_BindBuffer    = nullptr;
 static PFN_BufferData_t    fn_BufferData    = nullptr;
 static PFN_DeleteBuffers_t fn_DeleteBuffers = nullptr;
 
+static PFNGLGENFRAMEBUFFERSPROC fn_GenFramebuffers = nullptr;
+static PFNGLBINDFRAMEBUFFERPROC fn_BindFramebuffer = nullptr;
+static PFNGLFRAMEBUFFERTEXTURE2DPROC fn_FramebufferTexture2D = nullptr;
+static PFNGLCHECKFRAMEBUFFERSTATUSPROC fn_CheckFramebufferStatus = nullptr;
+static PFNGLDELETEFRAMEBUFFERSPROC fn_DeleteFramebuffers = nullptr;
+typedef void (APIENTRY * PFNGLUNIFORM2FPROC) (GLint location, GLfloat v0, GLfloat v1);
+static PFNGLUNIFORM2FPROC fn_Uniform2f = nullptr;
+
+static GLuint g_fbo = 0;
+static GLuint g_point_prog = 0;
+static GLuint g_point_vbo = 0;
+#include <vector>
+static std::vector<float> g_point_buffer;
+
 static void load_gl_functions() {
     fn_CreateShader         = (PFNGLCREATESHADERPROC)            eglGetProcAddress("glCreateShader");
     fn_ShaderSource         = (PFNGLSHADERSOURCEPROC)            eglGetProcAddress("glShaderSource");
@@ -174,6 +188,12 @@ static void load_gl_functions() {
     fn_BindBuffer    = (PFN_BindBuffer_t)   eglGetProcAddress("glBindBuffer");
     fn_BufferData    = (PFN_BufferData_t)   eglGetProcAddress("glBufferData");
     fn_DeleteBuffers = (PFN_DeleteBuffers_t)eglGetProcAddress("glDeleteBuffers");
+    fn_GenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)eglGetProcAddress("glGenFramebuffers");
+    fn_BindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)eglGetProcAddress("glBindFramebuffer");
+    fn_FramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)eglGetProcAddress("glFramebufferTexture2D");
+    fn_CheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)eglGetProcAddress("glCheckFramebufferStatus");
+    fn_DeleteFramebuffers = (PFNGLDELETEFRAMEBUFFERSPROC)eglGetProcAddress("glDeleteFramebuffers");
+    fn_Uniform2f = (PFNGLUNIFORM2FPROC)eglGetProcAddress("glUniform2f");
 }
 
 /* --- Helper Math / Utility --- */
@@ -294,44 +314,18 @@ static float       g_sim_accum = 0.0f;
 static rsTimer     g_wall_timer;
 
 /* --- Substrate Core Logic --- */
-static int dirty_min_x = 0;
-static int dirty_max_x = -1; // -1 means clean
-static int dirty_min_y = 0;
-static int dirty_max_y = -1;
-
-static inline void mark_dirty(int x, int y) {
-    if (dirty_max_x == -1) {
-        dirty_min_x = dirty_max_x = x;
-        dirty_min_y = dirty_max_y = y;
-    } else {
-        if (x < dirty_min_x) dirty_min_x = x;
-        if (x > dirty_max_x) dirty_max_x = x;
-        if (y < dirty_min_y) dirty_min_y = y;
-        if (y > dirty_max_y) dirty_max_y = y;
-    }
-}
-
 static inline uint32_t trans_point(int x, int y, uint32_t myc, float a, field *f) {
     if (x >= 0 && x < (int)f->width && y >= 0 && y < (int)f->height) {
-        mark_dirty(x, y);
-        if (a >= 1.0f) {
-            f->off_img[y * f->width + x] = myc;
-            return myc;
-        } else {
-            uint32_t c = f->off_img[y * f->width + x];
-            int or_val, og_val, ob_val;
-            int r, g, b;
-            point2rgb(c, &or_val, &og_val, &ob_val);
-            point2rgb(myc, &r, &g, &b);
-            int nr = or_val + (r - or_val) * a;
-            int ng = og_val + (g - og_val) * a;
-            int nb = ob_val + (b - ob_val) * a;
-            uint32_t res = rgb2point(nr, ng, nb);
-            f->off_img[y * f->width + x] = res;
-            return res;
-        }
+        int r, g, b;
+        point2rgb(myc, &r, &g, &b);
+        g_point_buffer.push_back((float)x);
+        g_point_buffer.push_back((float)y);
+        g_point_buffer.push_back(r / 255.0f);
+        g_point_buffer.push_back(g / 255.0f);
+        g_point_buffer.push_back(b / 255.0f);
+        g_point_buffer.push_back(a);
     }
-    return f->bgcolor;
+    return myc;
 }
 
 static inline void start_crack(struct field *f, crack *cr);
@@ -501,13 +495,13 @@ static void build_substrate(struct field *f) {
 }
 
 static void clear_img(field *f) {
-    for (unsigned int i = 0; i < f->width * f->height; i++) {
-        f->off_img[i] = f->bgcolor;
-    }
-    dirty_min_x = 0;
-    dirty_max_x = f->width - 1;
-    dirty_min_y = 0;
-    dirty_max_y = f->height - 1;
+    if (g_fbo == 0) return;
+    int r, g, b;
+    point2rgb(f->bgcolor, &r, &g, &b);
+    fn_BindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+    glClearColor(r/255.0f, g/255.0f, b/255.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    fn_BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 static inline void movedrawcrack(struct field *f, int cracknum) {
@@ -545,8 +539,14 @@ static inline void movedrawcrack(struct field *f, int cracknum) {
         if (!f->wireframe)
             region_color(f, cr);
 
-        mark_dirty(cx, cy);
-        f->off_img[cy * f->width + cx] = f->fgcolor;
+        int r, g, b;
+        point2rgb(f->fgcolor, &r, &g, &b);
+        g_point_buffer.push_back((float)cx);
+        g_point_buffer.push_back((float)cy);
+        g_point_buffer.push_back(r / 255.0f);
+        g_point_buffer.push_back(g / 255.0f);
+        g_point_buffer.push_back(b / 255.0f);
+        g_point_buffer.push_back(1.0f);
 
         if (cr->curved && (cr->degrees_drawn > 360.0f)) {
             start_crack(f, cr);
@@ -589,6 +589,85 @@ static void setup_quad_geometry() {
     if (g_ibo == 0) fn_GenBuffers(1, &g_ibo);
     fn_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ibo);
     fn_BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+}
+
+static void setup_fbo(int w, int h) {
+    if (!g_fbo) fn_GenFramebuffers(1, &g_fbo);
+    fn_BindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+    fn_FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_tex_id, 0);
+    fn_BindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void build_point_shader_program() {
+    const char *VERT_SRC =
+        "#version 140\n"
+        "in vec2 a_pos;\n"
+        "in vec4 a_color;\n"
+        "out vec4 v_color;\n"
+        "uniform vec2 u_res;\n"
+        "void main() {\n"
+        "    vec2 ndc = (a_pos + 0.5) / u_res * 2.0 - 1.0;\n"
+        "    gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);\n"
+        "    v_color = a_color;\n"
+        "}\n";
+
+    const char *FRAG_SRC =
+        "#version 140\n"
+        "in vec4 v_color;\n"
+        "out vec4 frag;\n"
+        "void main() {\n"
+        "    frag = v_color;\n"
+        "}\n";
+
+    auto compile = [](GLenum type, const char *src) -> GLuint {
+        GLuint s = fn_CreateShader(type);
+        fn_ShaderSource(s, 1, &src, nullptr);
+        fn_CompileShader(s);
+        return s;
+    };
+    GLuint vs = compile(GL_VERTEX_SHADER,   VERT_SRC);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, FRAG_SRC);
+    g_point_prog = fn_CreateProgram();
+    fn_AttachShader(g_point_prog, vs);
+    fn_AttachShader(g_point_prog, fs);
+    fn_BindAttribLocation(g_point_prog, 0, "a_pos");
+    fn_BindAttribLocation(g_point_prog, 1, "a_color");
+    fn_LinkProgram(g_point_prog);
+    fn_DeleteShader(vs);
+    fn_DeleteShader(fs);
+    if (!g_point_vbo) fn_GenBuffers(1, &g_point_vbo);
+}
+
+static void flush_points() {
+    if (g_point_buffer.empty()) return;
+    fn_BindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    fn_UseProgram(g_point_prog);
+    if (fn_Uniform2f) {
+        GLint res_loc = fn_GetUniformLocation(g_point_prog, "u_res");
+        fn_Uniform2f(res_loc, (float)g_field->width, (float)g_field->height);
+    }
+    
+    fn_BindBuffer(GL_ARRAY_BUFFER, g_point_vbo);
+    fn_BufferData(GL_ARRAY_BUFFER, g_point_buffer.size() * sizeof(float), g_point_buffer.data(), GL_STREAM_DRAW);
+    
+    fn_EnableVertexAttribArray(0);
+    fn_EnableVertexAttribArray(1);
+    fn_VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    fn_VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(2 * sizeof(float)));
+    
+    glDrawArrays(GL_POINTS, 0, g_point_buffer.size() / 6);
+    
+    fn_DisableVertexAttribArray(0);
+    fn_DisableVertexAttribArray(1);
+    fn_UseProgram(0);
+    fn_BindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_BLEND);
+    
+    g_point_buffer.clear();
 }
 
 static void setup_texture(int w, int h) {
@@ -690,16 +769,17 @@ static void initSaver() {
         g_field->parsedcolors[i] = parse_hex_color(rgb_colormap[i]);
     }
 
-    g_field->off_img = new uint32_t[g_field->width * g_field->height];
     g_field->cgrid = new int[g_field->width * g_field->height];
-
-    build_substrate(g_field);
-    clear_img(g_field);
 
     setup_quad_geometry();
     setup_texture(g_field->width, g_field->height);
+    setup_fbo(g_field->width, g_field->height);
     build_shader_program();
+    build_point_shader_program();
     glViewport(0, 0, g_field->width, g_field->height);
+
+    build_substrate(g_field);
+    clear_img(g_field);
     update_cursor_color();
 }
 
@@ -709,27 +789,28 @@ static void handle_resize(int w, int h) {
     g_field->width = w;
     g_field->height = h;
 
-    delete[] g_field->off_img;
     delete[] g_field->cgrid;
 
-    g_field->off_img = new uint32_t[w * h];
     g_field->cgrid = new int[w * h];
+
+    setup_texture(w, h);
+    setup_fbo(w, h);
+    glViewport(0, 0, w, h);
 
     build_substrate(g_field);
     clear_img(g_field);
-
-    setup_texture(w, h);
-    glViewport(0, 0, w, h);
 }
 
 static void cleanup_saver() {
     if (g_prog) fn_DeleteProgram(g_prog);
+    if (g_point_prog) fn_DeleteProgram(g_point_prog);
     if (g_vbo) fn_DeleteBuffers(1, &g_vbo);
+    if (g_point_vbo) fn_DeleteBuffers(1, &g_point_vbo);
     if (g_ibo) fn_DeleteBuffers(1, &g_ibo);
+    if (g_fbo) fn_DeleteFramebuffers(1, &g_fbo);
     if (g_tex_id) glDeleteTextures(1, &g_tex_id);
 
     if (g_field) {
-        if (g_field->off_img) delete[] g_field->off_img;
         if (g_field->cgrid) delete[] g_field->cgrid;
         if (g_field->cracks) free(g_field->cracks);
         if (g_field->parsedcolors) delete[] g_field->parsedcolors;
@@ -750,6 +831,7 @@ static void update_physics() {
     }
 
     g_field->cycles++;
+    flush_points();
 }
 
 static void render_scene() {
@@ -757,22 +839,8 @@ static void render_scene() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // Upload CPU pixels to the texture
+    // Bind the texture that was rendered to by the FBO
     glBindTexture(GL_TEXTURE_2D, g_tex_id);
-    if (dirty_max_x >= 0) {
-        int w = dirty_max_x - dirty_min_x + 1;
-        int h = dirty_max_y - dirty_min_y + 1;
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, g_field->width);
-        glPixelStorei(GL_UNPACK_SKIP_PIXELS, dirty_min_x);
-        glPixelStorei(GL_UNPACK_SKIP_ROWS, dirty_min_y);
-        
-        glTexSubImage2D(GL_TEXTURE_2D, 0, dirty_min_x, dirty_min_y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, g_field->off_img);
-        
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-        dirty_max_x = -1;
-    }
 
     fn_UseProgram(g_prog);
     glActiveTexture(GL_TEXTURE0);
@@ -1122,7 +1190,7 @@ static void render_frame() {
         g_sim_accum -= SIM_DT;
         ++steps;
     }
-    if (dirty_max_x >= 0) {
+    if (steps > 0) {
         frame_needs_render = true;
     }
 
