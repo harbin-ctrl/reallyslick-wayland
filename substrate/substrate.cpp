@@ -17,6 +17,8 @@
 #include <vector>
 #include <unistd.h>
 #include <time.h>
+#include <sys/mman.h>
+#include <fcntl.h>
 
 #include <wayland-client.h>
 #include <wayland-egl.h>
@@ -244,7 +246,15 @@ static struct xdg_toplevel  *g_toplevel;
 static struct wl_seat       *g_seat;
 static struct wl_keyboard   *g_keyboard = nullptr;
 static struct wl_pointer    *g_pointer = nullptr;
+static struct wl_shm        *g_shm = nullptr;
+static struct wl_surface    *g_cursor_surface = nullptr;
+static struct wl_buffer     *g_cursor_buffer = nullptr;
+static uint32_t             *g_cursor_data = nullptr;
+static uint32_t              g_cursor_serial = 0;
 static struct wl_egl_window                *g_egl_window;
+
+static void update_cursor_color();
+static void setup_cursor();
 static struct zxdg_decoration_manager_v1   *g_deco_manager  = nullptr;
 static struct zxdg_toplevel_decoration_v1  *g_toplevel_deco = nullptr;
 
@@ -861,6 +871,7 @@ static void kb_key(void *d, struct wl_keyboard *kb, uint32_t ser,
         }
         build_substrate(g_field);
         clear_img(g_field);
+        update_cursor_color();
     } else if (key == 57 || key == 28 || key == 96) {  /* KEY_SPACE / KEY_ENTER / KEY_KPENTER */
         g_field->bgcolor = parse_color(dBgColorStr);
         g_field->fgcolor = parse_color(dFgColorStr);
@@ -872,6 +883,7 @@ static void kb_key(void *d, struct wl_keyboard *kb, uint32_t ser,
         g_is_dark_bg = ((r + g + b) / 3 < 128);
         build_substrate(g_field);
         clear_img(g_field);
+        update_cursor_color();
     }
 }
 static void kb_modifiers(void *d, struct wl_keyboard *kb, uint32_t ser,
@@ -882,10 +894,58 @@ static const struct wl_keyboard_listener keyboard_lst = {
     kb_keymap, kb_enter, kb_leave, kb_key, kb_modifiers, kb_repeat_info
 };
 
+static void update_cursor_color() {
+    if (!g_cursor_data) return;
+    uint32_t color = g_is_dark_bg ? 0xFFFFFFFF : 0xFF000000;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            if ((x - 8)*(x - 8) + (y - 8)*(y - 8) <= 4) {
+                g_cursor_data[y * 16 + x] = color;
+            } else {
+                g_cursor_data[y * 16 + x] = 0x00000000;
+            }
+        }
+    }
+    if (g_cursor_surface) {
+        wl_surface_damage(g_cursor_surface, 0, 0, 16, 16);
+        wl_surface_commit(g_cursor_surface);
+        if (g_pointer) {
+            wl_pointer_set_cursor(g_pointer, g_cursor_serial, g_cursor_surface, 8, 8);
+        }
+    }
+}
+
+static void setup_cursor() {
+    if (!g_shm || !g_compositor) return;
+    int size = 16 * 16 * 4;
+    char name[] = "/tmp/substrate-shm-XXXXXX";
+    int fd = mkstemp(name);
+    if (fd < 0) return;
+    unlink(name);
+    if (ftruncate(fd, size) < 0) {
+        close(fd);
+        return;
+    }
+    g_cursor_data = (uint32_t*)mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    struct wl_shm_pool *pool = wl_shm_create_pool(g_shm, fd, size);
+    g_cursor_buffer = wl_shm_pool_create_buffer(pool, 0, 16, 16, 16*4, WL_SHM_FORMAT_ARGB8888);
+    wl_shm_pool_destroy(pool);
+    close(fd);
+
+    g_cursor_surface = wl_compositor_create_surface(g_compositor);
+    wl_surface_attach(g_cursor_surface, g_cursor_buffer, 0, 0);
+    update_cursor_color();
+}
+
 static void pointer_enter(void *d, struct wl_pointer *pointer,
                           uint32_t serial, struct wl_surface *surface,
                           wl_fixed_t sx, wl_fixed_t sy) {
-    wl_pointer_set_cursor(pointer, serial, nullptr, 0, 0);
+    g_cursor_serial = serial;
+    if (g_cursor_surface) {
+        wl_pointer_set_cursor(pointer, serial, g_cursor_surface, 8, 8);
+    } else {
+        wl_pointer_set_cursor(pointer, serial, nullptr, 0, 0);
+    }
 }
 static void pointer_leave(void *d, struct wl_pointer *pointer,
                           uint32_t serial, struct wl_surface *surface) {}
@@ -943,6 +1003,9 @@ static void registry_global(void *d, struct wl_registry *reg,
     } else if (!strcmp(iface, zxdg_decoration_manager_v1_interface.name)) {
         g_deco_manager = (struct zxdg_decoration_manager_v1 *)
             wl_registry_bind(reg, name, &zxdg_decoration_manager_v1_interface, 1);
+    } else if (!strcmp(iface, wl_shm_interface.name)) {
+        g_shm = (struct wl_shm *)
+            wl_registry_bind(reg, name, &wl_shm_interface, 1);
     }
 }
 static void registry_remove(void *d, struct wl_registry *r, uint32_t n) {}
@@ -1179,6 +1242,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "substrate: missing required Wayland globals\n");
         return 1;
     }
+    setup_cursor();
 
     g_surface = wl_compositor_create_surface(g_compositor);
     g_xdg_surface = xdg_wm_base_get_xdg_surface(g_wm_base, g_surface);
