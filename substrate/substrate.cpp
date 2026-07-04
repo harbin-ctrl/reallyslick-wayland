@@ -99,6 +99,7 @@ struct field {
 /* --- Global Saver Settings --- */
 static bool dWireframe = false;
 static bool dSeamless = false;
+static bool g_is_dark_bg = false;
 static unsigned int dMaxCycles = 10000;
 static unsigned int dInitialCracks = 3;
 static unsigned int dMaxCracks = 100;
@@ -196,6 +197,23 @@ static inline void point2rgb(uint32_t c, int *r, int *g, int *b) {
 
 static inline uint32_t rgb2point(int r, int g, int b, int a = 255) {
     return (a << 24) | (b << 16) | (g << 8) | r;
+}
+
+static inline uint32_t hsv_to_rgb(float h, float s, float v) {
+    float c = v * s;
+    float h_prime = h / 60.0f;
+    float h_prime_mod_2 = h_prime;
+    while (h_prime_mod_2 >= 2.0f) h_prime_mod_2 -= 2.0f;
+    float x = c * (1.0f - fabsf(h_prime_mod_2 - 1.0f));
+    float m = v - c;
+    float r = 0, g = 0, b = 0;
+    if (h_prime < 1.0f) { r = c; g = x; b = 0; }
+    else if (h_prime < 2.0f) { r = x; g = c; b = 0; }
+    else if (h_prime < 3.0f) { r = 0; g = c; b = x; }
+    else if (h_prime < 4.0f) { r = 0; g = x; b = c; }
+    else if (h_prime < 5.0f) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    return rgb2point((int)((r + m) * 255.0f), (int)((g + m) * 255.0f), (int)((b + m) * 255.0f));
 }
 
 static uint32_t parse_hex_color(const char *str) {
@@ -644,6 +662,9 @@ static void initSaver() {
     g_field->seamless = dSeamless ? 1 : 0;
     g_field->bgcolor = parse_color(dBgColorStr);
     g_field->fgcolor = parse_color(dFgColorStr);
+    int r, g, b;
+    point2rgb(g_field->bgcolor, &r, &g, &b);
+    g_is_dark_bg = ((r + g + b) / 3 < 128);
     g_field->cycles = 0;
     g_field->cracks = nullptr;
     g_field->cgrid = nullptr;
@@ -819,7 +840,35 @@ static void kb_key(void *d, struct wl_keyboard *kb, uint32_t ser,
             xdg_toplevel_unset_fullscreen(g_toplevel);
         else
             xdg_toplevel_set_fullscreen(g_toplevel, nullptr);
-    } else if (key == 105 || key == 106 || key == 57) {  /* KEY_LEFT / KEY_RIGHT / KEY_SPACE */
+    } else if (key == 105 || key == 106) {  /* KEY_LEFT / KEY_RIGHT */
+        g_is_dark_bg = !g_is_dark_bg;
+        float base_hue = frand(360.0f);
+        if (g_is_dark_bg) {
+            g_field->bgcolor = hsv_to_rgb(base_hue, frand(0.5f), frand(0.2f) + 0.05f);
+            g_field->fgcolor = hsv_to_rgb(fmodf(base_hue + 180.0f, 360.0f), 0.5f + frand(0.5f), 0.8f + frand(0.2f));
+            for (int i = 0; i < g_field->numcolors; i++) {
+                float hue = fmodf(base_hue + (360.0f / g_field->numcolors) * i + frand(30.0f), 360.0f);
+                g_field->parsedcolors[i] = hsv_to_rgb(hue, 0.6f + frand(0.4f), 0.7f + frand(0.3f));
+            }
+        } else {
+            g_field->bgcolor = hsv_to_rgb(base_hue, frand(0.3f), 0.8f + frand(0.2f));
+            g_field->fgcolor = hsv_to_rgb(fmodf(base_hue + 180.0f, 360.0f), 0.5f + frand(0.5f), frand(0.3f));
+            for (int i = 0; i < g_field->numcolors; i++) {
+                float hue = fmodf(base_hue + (360.0f / g_field->numcolors) * i + frand(30.0f), 360.0f);
+                g_field->parsedcolors[i] = hsv_to_rgb(hue, 0.7f + frand(0.3f), frand(0.4f));
+            }
+        }
+        build_substrate(g_field);
+        clear_img(g_field);
+    } else if (key == 57 || key == 28 || key == 96) {  /* KEY_SPACE / KEY_ENTER / KEY_KPENTER */
+        g_field->bgcolor = parse_color(dBgColorStr);
+        g_field->fgcolor = parse_color(dFgColorStr);
+        for (int i = 0; i < g_field->numcolors; i++) {
+            g_field->parsedcolors[i] = parse_hex_color(rgb_colormap[i]);
+        }
+        int r, g, b;
+        point2rgb(g_field->bgcolor, &r, &g, &b);
+        g_is_dark_bg = ((r + g + b) / 3 < 128);
         build_substrate(g_field);
         clear_img(g_field);
     }
