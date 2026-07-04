@@ -67,6 +67,7 @@ static const char *rgb_colormap[] = {
 struct crack {
     float x, y;
     float t;
+    float dx, dy;
     float ys, xs, t_inc; /* for curvature calculations */
     int curved;
     uint32_t sandcolor;
@@ -173,8 +174,18 @@ static void load_gl_functions() {
 }
 
 /* --- Helper Math / Utility --- */
+static uint32_t fast_rand_seed = 123456789;
+static inline uint32_t fast_rand() {
+    uint32_t x = fast_rand_seed;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    fast_rand_seed = x;
+    return x;
+}
+#define rand fast_rand
 static inline float frand(float max) {
-    return ((float)rand() / (float)RAND_MAX) * max;
+    return (float)(fast_rand() & 0xFFFFFF) / (float)0xFFFFFF * max;
 }
 
 static inline void point2rgb(uint32_t c, int *r, int *g, int *b) {
@@ -307,10 +318,12 @@ static inline void region_color(struct field *f, crack *cr) {
     float w;
     float drawx, drawy;
 
+    float rx_step = 0.81f * sinf(cr->t * M_PI / 180.0f);
+    float ry_step = 0.81f * cosf(cr->t * M_PI / 180.0f);
     while (openspace) {
         /* move perpendicular to crack */
-        rx += (0.81f * sinf(cr->t * M_PI / 180.0f));
-        ry -= (0.81f * cosf(cr->t * M_PI / 180.0f));
+        rx += rx_step;
+        ry -= ry_step;
 
         cx = (int) rx;
         cy = (int) ry;
@@ -339,11 +352,14 @@ static inline void region_color(struct field *f, crack *cr) {
     w = cr->sandg / (grains - 1);
 
     for (i = 0; i < grains; i++) {
-        drawx = (cr->x + (rx - cr->x) * sinf(cr->sandp + sinf((float) i * w)));
-        drawy = (cr->y + (ry - cr->y) * sinf(cr->sandp + sinf((float) i * w)));
+        float sval = sinf(cr->sandp + sinf((float) i * w));
+        drawx = cr->x + (rx - cr->x) * sval;
+        drawy = cr->y + (ry - cr->y) * sval;
         if (f->seamless) {
-            drawx = fmodf(drawx + f->width, f->width);
-            drawy = fmodf(drawy + f->height, f->height);
+            if (drawx >= f->width) drawx -= f->width;
+            else if (drawx < 0.0f) drawx += f->width;
+            if (drawy >= f->height) drawy -= f->height;
+            else if (drawy < 0.0f) drawy += f->height;
         }
 
         trans_point((int)drawx, (int)drawy, cr->sandcolor, (0.1f - (float)i / (grains * 10.0f)), f);
@@ -408,6 +424,8 @@ static inline void start_crack(struct field *f, crack *cr) {
     cr->x = px + (0.61f * cosf(a * M_PI / 180.0f));
     cr->y = py + (0.61f * sinf(a * M_PI / 180.0f));
     cr->t = a;
+    cr->dx = STEP * cosf(a * M_PI / 180.0f);
+    cr->dy = STEP * sinf(a * M_PI / 180.0f);
 }
 
 static inline void make_crack(struct field *f) {
@@ -468,8 +486,8 @@ static inline void movedrawcrack(struct field *f, int cracknum) {
     crack *cr = &(f->cracks[cracknum]);
 
     if (!cr->curved) {
-        cr->x += (STEP * cosf(cr->t * M_PI / 180.0f));
-        cr->y += (STEP * sinf(cr->t * M_PI / 180.0f));
+        cr->x += cr->dx;
+        cr->y += cr->dy;
     } else {
         cr->x += (cr->ys * cosf(cr->t * M_PI / 180.0f));
         cr->y += (cr->ys * sinf(cr->t * M_PI / 180.0f));
@@ -481,8 +499,10 @@ static inline void movedrawcrack(struct field *f, int cracknum) {
         cr->degrees_drawn += fabsf(cr->t_inc);
     }
     if (f->seamless) {
-        cr->x = fmodf(cr->x + f->width, f->width);
-        cr->y = fmodf(cr->y + f->height, f->height);
+        if (cr->x >= f->width) cr->x -= f->width;
+        else if (cr->x < 0.0f) cr->x += f->width;
+        if (cr->y >= f->height) cr->y -= f->height;
+        else if (cr->y < 0.0f) cr->y += f->height;
     }
 
     cx = (int)(cr->x + (frand(0.66f) - 0.33f));
@@ -1048,6 +1068,7 @@ int main(int argc, char *argv[]) {
     }
 
     srand(time(nullptr));
+    fast_rand_seed = time(nullptr) ^ 0x1A2B3C4D;
 
     g_display = wl_display_connect(nullptr);
     if (!g_display) {
