@@ -242,7 +242,8 @@ static struct wl_surface    *g_surface;
 static struct xdg_surface   *g_xdg_surface;
 static struct xdg_toplevel  *g_toplevel;
 static struct wl_seat       *g_seat;
-static struct wl_keyboard   *g_keyboard;
+static struct wl_keyboard   *g_keyboard = nullptr;
+static struct wl_pointer    *g_pointer = nullptr;
 static struct wl_egl_window                *g_egl_window;
 static struct zxdg_decoration_manager_v1   *g_deco_manager  = nullptr;
 static struct zxdg_toplevel_decoration_v1  *g_toplevel_deco = nullptr;
@@ -881,10 +882,45 @@ static const struct wl_keyboard_listener keyboard_lst = {
     kb_keymap, kb_enter, kb_leave, kb_key, kb_modifiers, kb_repeat_info
 };
 
+static void pointer_enter(void *d, struct wl_pointer *pointer,
+                          uint32_t serial, struct wl_surface *surface,
+                          wl_fixed_t sx, wl_fixed_t sy) {
+    wl_pointer_set_cursor(pointer, serial, nullptr, 0, 0);
+}
+static void pointer_leave(void *d, struct wl_pointer *pointer,
+                          uint32_t serial, struct wl_surface *surface) {}
+static void pointer_motion(void *d, struct wl_pointer *pointer,
+                           uint32_t time, wl_fixed_t sx, wl_fixed_t sy) {}
+static void pointer_button(void *d, struct wl_pointer *pointer,
+                           uint32_t serial, uint32_t time, uint32_t button,
+                           uint32_t state) {}
+static void pointer_axis(void *d, struct wl_pointer *pointer,
+                         uint32_t time, uint32_t axis, wl_fixed_t value) {}
+static void pointer_frame(void *d, struct wl_pointer *pointer) {}
+static void pointer_axis_source(void *d, struct wl_pointer *pointer, uint32_t axis_source) {}
+static void pointer_axis_stop(void *d, struct wl_pointer *pointer, uint32_t time, uint32_t axis) {}
+static void pointer_axis_discrete(void *d, struct wl_pointer *pointer, uint32_t axis, int32_t discrete) {}
+
+static const struct wl_pointer_listener pointer_lst = {
+    pointer_enter,
+    pointer_leave,
+    pointer_motion,
+    pointer_button,
+    pointer_axis,
+    pointer_frame,
+    pointer_axis_source,
+    pointer_axis_stop,
+    pointer_axis_discrete
+};
+
 static void seat_capabilities(void *d, struct wl_seat *seat, uint32_t caps) {
     if (caps & WL_SEAT_CAPABILITY_KEYBOARD) {
         g_keyboard = wl_seat_get_keyboard(seat);
         wl_keyboard_add_listener(g_keyboard, &keyboard_lst, nullptr);
+    }
+    if (caps & WL_SEAT_CAPABILITY_POINTER) {
+        g_pointer = wl_seat_get_pointer(seat);
+        wl_pointer_add_listener(g_pointer, &pointer_lst, nullptr);
     }
 }
 static void seat_name(void *d, struct wl_seat *seat, const char *name) {}
@@ -1211,6 +1247,7 @@ int main(int argc, char *argv[]) {
     if (g_toplevel_deco) zxdg_toplevel_decoration_v1_destroy(g_toplevel_deco);
     if (g_deco_manager)  zxdg_decoration_manager_v1_destroy(g_deco_manager);
     if (g_keyboard) wl_keyboard_destroy(g_keyboard);
+    if (g_pointer)  wl_pointer_destroy(g_pointer);
     xdg_toplevel_destroy(g_toplevel);
     xdg_surface_destroy(g_xdg_surface);
     wl_surface_destroy(g_surface);
