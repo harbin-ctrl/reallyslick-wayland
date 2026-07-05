@@ -115,6 +115,7 @@ static char             help[] =
   "E   - Change full-scene effects\n"
   "T   - Toggle Textures\n"
   "G   - Toggle Fog\n"
+  "S   - Cycle render scale (perf)\n"
 #ifndef WINDOWS
   "D   - Toggle Frame Delay\n"
 #endif
@@ -171,6 +172,9 @@ static float            render_aspect;
 static float            fog_distance;
 static int              render_width;
 static int              render_height;
+static int              fbo_width;     // internal 3D render-target size (scaled)
+static int              fbo_height;
+static float            render_scale = 1.0f; // <1 renders the 3D scene smaller, then upscales
 static bool             letterbox;
 static int              letterbox_offset;
 static int              effect;
@@ -569,8 +573,29 @@ void RenderResize (void)
   if (letterbox) {
     letterbox_offset = render_height / 6;
     render_height = render_height - letterbox_offset * 2;
-  } else 
+  } else
     letterbox_offset = 0;
+  // Internal 3D resolution. Fill-rate (not vertices) is the bottleneck here, so
+  // rendering the scene into a smaller FBO and bilinear-upscaling it on the
+  // final blit is the cheapest way to buy frame time. Initialised once from
+  // $PIXELCITY_SCALE or the saved "RenderScale" percent; cycled live with 'S'.
+  {
+    static bool scale_init = false;
+    if (!scale_init) {
+      scale_init = true;
+      const char *s = getenv ("PIXELCITY_SCALE");
+      if (s)
+        render_scale = (float)atof (s);
+      else {
+        int pct = IniInt ("RenderScale");
+        render_scale = pct > 0 ? pct / 100.0f : 1.0f;
+      }
+      if (render_scale < 0.25f || render_scale > 1.0f)
+        render_scale = 1.0f;
+    }
+  }
+  fbo_width  = MAX (1, (int)(render_width  * render_scale));
+  fbo_height = MAX (1, (int)(render_height * render_scale));
   //render_aspect = (float)render_height / (float)render_width;
   glViewport (0, letterbox_offset, render_width, render_height);
   glMatrixMode (GL_PROJECTION);
@@ -593,7 +618,7 @@ void RenderResize (void)
     glBindFramebufferEXT(GL_FRAMEBUFFER, main_fbo);
     
     glBindTexture(GL_TEXTURE_2D, main_fbo_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, fbo_width, fbo_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -601,7 +626,7 @@ void RenderResize (void)
     glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, main_fbo_tex, 0);
 
     glBindRenderbufferEXT(GL_RENDERBUFFER, main_fbo_depth);
-    glRenderbufferStorageEXT(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, render_width, render_height);
+    glRenderbufferStorageEXT(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, fbo_width, fbo_height);
     glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, main_fbo_depth);
 
     glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
@@ -948,6 +973,28 @@ void RenderLetterboxToggle ()
 
 -----------------------------------------------------------------------------*/
 
+void RenderScaleCycle ()
+{
+
+  // Cycle the internal 3D resolution. On fill-rate-bound GPUs a lower scale
+  // buys frame time; the scene is bilinear-upscaled to the window on the final
+  // blit, so the cost is a little softness. Watch the FPS counter (P) to tune.
+  static const float steps[] = { 1.0f, 0.85f, 0.75f, 0.66f, 0.5f };
+  const int          n = sizeof (steps) / sizeof (steps[0]);
+  int                cur = 0, i;
+
+  for (i = 0; i < n; i++)
+    if (fabs (render_scale - steps[i]) < 0.01f) { cur = i; break; }
+  render_scale = steps[(cur + 1) % n];
+  IniIntSet ("RenderScale", (int)(render_scale * 100.0f + 0.5f));
+  RenderResize ();
+
+}
+
+/*-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------*/
+
 void RenderWireframeToggle ()
 {
 
@@ -1077,13 +1124,14 @@ void RenderUpdate (void)
       glBindFramebufferEXT(GL_FRAMEBUFFER, main_fbo);
   }
 
-  glViewport (0, 0, WinWidth (), WinHeight ());
+  // The scene is drawn into the (possibly downscaled) FBO, so use FBO dims.
+  glViewport (0, 0, fbo_width, fbo_height);
   glDepthMask (true);
   glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_DEPTH_TEST);
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  if (letterbox) 
-    glViewport (0, letterbox_offset, render_width, render_height);
+  if (letterbox)
+    glViewport (0, (int)(letterbox_offset * render_scale), fbo_width, fbo_height);
   if (LOADING_SCREEN && TextureReady () && !EntityReady ()) {
     if (glBindFramebufferEXT && main_fbo) glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
 #ifdef WINDOWS
@@ -1181,7 +1229,8 @@ void RenderUpdate (void)
 
       if (post_shader && RenderBloom()) {
           post_shader->Bind();
-          post_shader->SetUniform2f("resolution", (float)render_width, (float)render_height);
+          // Blur taps are in texels of the FBO texture, which is the scaled size.
+          post_shader->SetUniform2f("resolution", (float)fbo_width, (float)fbo_height);
           post_shader->SetUniform1i("tex", 0);
       }
 

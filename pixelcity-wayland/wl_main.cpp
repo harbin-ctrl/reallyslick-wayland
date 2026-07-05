@@ -56,6 +56,7 @@ extern void RenderEffectCycle ();
 extern void RenderLetterboxToggle ();
 extern void RenderFPSToggle ();
 extern void RenderFogToggle ();
+extern void RenderScaleCycle ();
 extern void RenderFlatToggle ();
 extern void RenderHelpToggle ();
 extern void WorldReset ();
@@ -198,6 +199,7 @@ static void kb_key (void*, wl_keyboard*, uint32_t, uint32_t, uint32_t key,
   case XKB_KEY_g: case XKB_KEY_G: RenderFogToggle (); break;
   case XKB_KEY_t: case XKB_KEY_T: RenderFlatToggle (); break;
   case XKB_KEY_p: case XKB_KEY_P: RenderFPSToggle (); break;
+  case XKB_KEY_s: case XKB_KEY_S: RenderScaleCycle (); break;
   case XKB_KEY_F1: RenderHelpToggle (); break;
   case XKB_KEY_f: case XKB_KEY_F:
     is_fullscreen = !is_fullscreen;
