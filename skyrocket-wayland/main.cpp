@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
                     running = false;
-                } else if (event.key.keysym.sym == SDLK_f) {
+                } else if (event.key.keysym.sym == SDLK_f || event.key.keysym.sym == SDLK_F11) {
                     fullscreen = !fullscreen;
                     SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
                 }
