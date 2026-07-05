@@ -1749,8 +1749,8 @@ void draw_all_particles(std::vector<particle>& parts) {
     std::map<GLuint, std::vector<PBV> > flareBatches;
     extern double billboardMat[16];
     
-    float right[3] = { (float)billboardMat[0], (float)billboardMat[4], (float)billboardMat[8] };
-    float up[3]    = { (float)billboardMat[1], (float)billboardMat[5], (float)billboardMat[9] };
+    float right[3] = { (float)billboardMat[0], (float)billboardMat[1], (float)billboardMat[2] };
+    float up[3]    = { (float)billboardMat[4], (float)billboardMat[5], (float)billboardMat[6] };
     
     for (size_t i = 0; i < parts.size(); i++) {
         particle* p = &parts[i];
