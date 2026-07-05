@@ -16,8 +16,10 @@ int strtol_minmaxdef(const char *optarg, const int base, const int min, const in
 
 int main(int argc, char **argv) {
     bool benchmark = false;
-    if (argc > 1 && strcmp(argv[1], "--benchmark") == 0) {
-        benchmark = true;
+    bool fullscreen = false;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--benchmark") == 0) benchmark = true;
+        if (strcmp(argv[i], "--fullscreen") == 0) fullscreen = true;
     }
 
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "wayland,x11");
@@ -34,11 +36,16 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 
+    Uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (fullscreen) {
+        windowFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    }
+
     SDL_Window *window = SDL_CreateWindow(
         "Solar Winds",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         800, 600,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
+        windowFlags
     );
 
     if (!window) {
@@ -97,6 +104,9 @@ int main(int argc, char **argv) {
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
                     running = false;
+                } else if (event.key.keysym.sym == SDLK_f || event.key.keysym.sym == SDLK_F11) {
+                    fullscreen = !fullscreen;
+                    SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
                 } else if (event.key.keysym.sym == SDLK_RIGHT && !benchmark) {
                     currentPreset = (currentPreset % 6) + 1;
                     sprintf(presetBuf, "%d", currentPreset);

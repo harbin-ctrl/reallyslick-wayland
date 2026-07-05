@@ -2,7 +2,7 @@
 Type=Application
 Name=Solar Winds
 Comment=Wayland Desktop Toy
-Exec=$HOME/solarwinds-wayland/solarwinds
+Exec=solarwinds
 Icon=solarwinds
 Terminal=false
 Categories=Amusement;DesktopToy;
