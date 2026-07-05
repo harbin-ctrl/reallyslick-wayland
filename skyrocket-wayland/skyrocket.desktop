@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Skyrocket (Optimized)
 Comment=Really Slick Skyrocket Screensaver ported to Wayland
-Exec=$HOME/wayland_skyrocket/skyrocket --fullscreen
+Exec=$HOME/skyrocket-wayland/skyrocket --fullscreen
 Icon=skyrocket
 Terminal=false
 Type=Application
