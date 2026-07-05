@@ -383,7 +383,7 @@ void EntityRender ()
   glBindTexture(GL_TEXTURE_2D, 0);
   glColor3f (0, 0, 0);
   for (int i = 0; i < visible_count; i++) {
-      if (sorted_cells[i].dist_sq > lod_dist_sq) continue; // Skip flat details for LOD
+      //if (sorted_cells[i].dist_sq > lod_dist_sq) continue; // Skip flat details for LOD
       if (wireframe)
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat_wireframe);
       else 
