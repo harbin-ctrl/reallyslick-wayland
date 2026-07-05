@@ -168,7 +168,11 @@ void CLight::Render ()
     return;
   if (_blink && (GetTimeInMillis () % _blink_interval) > 200)
     return;
+  // MathAngle() can return exactly 360.0 for negative multiples of 360, which
+  // would index one past angles[][360]. Clamp to keep the read in bounds.
   angle = (int)MathAngle (camera.y);
+  if (angle < 0 || angle >= 360)
+    angle = ((angle % 360) + 360) % 360;
   offset = angles[_size][angle];
   pos = _position;
   glColor4fv (&_color.red);

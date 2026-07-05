@@ -589,7 +589,8 @@ void CBuilding::CreateSimple ()
   float       cap_height;
   float       ledge;
 
-  for(int i=0; i<=10; i++)
+  // 10 vertices (5 corner pairs) form the 4-wall closed quad strip: indices 0..9.
+  for(int i=0; i<10; i++)
     qs.index_list.push_back(i);
 
   //How tall the flat-color roof is
