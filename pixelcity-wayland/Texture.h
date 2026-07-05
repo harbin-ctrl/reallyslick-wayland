@@ -7,8 +7,12 @@
 #define TRIM_ROWS             4
 #define TRIM_SIZE             (1.0f / TRIM_ROWS)
 #define TRIM_PIXELS           (TRIM_RESOLUTION / TRIM_ROWS)
-#define LOGO_RESOLUTION       1024
-#define LOGO_ROWS             16
+// 4096 is this GPU's GL_MAX_TEXTURE_SIZE ceiling (confirmed at runtime); kept at
+// 64px/sign (same as before) so legibility doesn't shrink as rows go up. That's
+// ~64MB of texture (was ~4MB at 1024/16) -- a one-time load-time/VRAM cost, not
+// a per-frame fillrate cost (signs are a handful of small quads, not full-screen).
+#define LOGO_RESOLUTION       4096
+#define LOGO_ROWS             64
 #define LOGO_SIZE             (1.0f / LOGO_ROWS)
 #define LOGO_PIXELS           (LOGO_RESOLUTION / LOGO_ROWS)
 
