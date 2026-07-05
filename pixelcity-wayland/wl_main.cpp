@@ -39,8 +39,6 @@ extern void TextureTerm ();
 extern void WorldTerm ();
 extern void RenderTerm ();
 extern void CameraTerm ();
-extern bool TextureReady ();
-extern bool EntityReady ();
 
 extern void CameraUpdate ();
 extern void EntityUpdate ();

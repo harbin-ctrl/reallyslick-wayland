@@ -992,15 +992,3 @@ void TextureInit (void)
   // int  names = PREFIX_COUNT * NAME_COUNT + SUFFIX_COUNT * NAME_COUNT;
 
 }
-
-float TextureProgress ()
-{
-  int total = 0;
-  int ready = 0;
-  for (CTexture* t = head; t; t = t->_next) {
-    total++;
-    if (t->_ready)
-      ready++;
-  }
-  return total > 0 ? (float)ready / total : 1.0f;
-}

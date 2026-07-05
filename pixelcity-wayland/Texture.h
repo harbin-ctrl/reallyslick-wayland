@@ -48,5 +48,4 @@ unsigned  TextureRandomBuilding (int index);
 bool      TextureReady ();
 void      TextureReset (void);
 void      TextureUpdate (void);
-float     TextureProgress ();
 
