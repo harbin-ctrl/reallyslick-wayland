@@ -109,6 +109,7 @@ struct cell
     GLuint                    list_flat;
   unsigned        list_flat_wireframe;
   unsigned        list_alpha;
+  unsigned        list_logo;
   GLvector        pos;
 };
 
@@ -230,7 +231,12 @@ static void do_compile ()
     }
   }
   glEndList();	
-  //Now a list of stuff to be alpha-blended, and thus rendered last
+  //Now a list of stuff to be alpha-blended, and thus rendered last. Building
+  //signs (TEXTURE_LOGOS) are pulled into their own list so they can be drawn at
+  //full distance -- there are only a handful and they are the landmark the user
+  //looks for, whereas the rest of the alpha pass (radio towers, roof light
+  //strips) is numerous/overdraw-heavy and stays distance-culled for fillrate.
+  unsigned logo_tex = TextureId (TEXTURE_LOGOS);
   if (!cell_list[x][y].list_alpha)
     cell_list[x][y].list_alpha = glGenLists(1);
   glNewList (cell_list[x][y].list_alpha, GL_COMPILE);
@@ -240,13 +246,32 @@ static void do_compile ()
   glDisable (GL_CULL_FACE);
   for (i = entity_list.begin(); i < entity_list.end(); ++i) {
     GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && (*i)->Alpha ()) {
+    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && (*i)->Alpha () &&
+        (*i)->Texture () != logo_tex) {
       glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
       (*i)->Render ();
     }
   }
   glDepthMask (true);
-  glEndList();	
+  glEndList();
+
+  //Building signs, drawn at full distance (see note above).
+  if (!cell_list[x][y].list_logo)
+    cell_list[x][y].list_logo = glGenLists(1);
+  glNewList (cell_list[x][y].list_logo, GL_COMPILE);
+  glDepthMask (false);
+  glEnable (GL_BLEND);
+  glDisable (GL_CULL_FACE);
+  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
+    GLvector pos = (*i)->Center ();
+    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && (*i)->Alpha () &&
+        (*i)->Texture () == logo_tex) {
+      glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
+      (*i)->Render ();
+    }
+  }
+  glDepthMask (true);
+  glEndList();
 
   //now walk the grid
   compile_x++;
@@ -416,6 +441,14 @@ void EntityRender ()
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_alpha);
       }
   }
+
+  //Building signs render at full distance -- they are few and are the landmark
+  //the user looks for. Back-to-front (same sorted order) for correct blending.
+  glDepthMask (false);
+  for (int i = visible_count - 1; i >= 0; i--) {
+      glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_logo);
+  }
+  glDepthMask (true);
 }
 
 
@@ -447,7 +480,11 @@ void EntityClear ()
       glNewList (cell_list[x][y].list_flat_wireframe, GL_COMPILE);
       glEndList();	
       glNewList (cell_list[x][y].list_flat, GL_COMPILE);
-      glEndList();	
+      glEndList();
+      if (cell_list[x][y].list_logo) {
+        glNewList (cell_list[x][y].list_logo, GL_COMPILE);
+        glEndList();
+      }
     }
   }
 

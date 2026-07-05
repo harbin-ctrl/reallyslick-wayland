@@ -290,7 +290,9 @@ void CBuilding::ConstructRoof (float left, float right, float front, float back,
   height = 5 - _roof_tiers;
   logo_offset = 0.2f;
   //See if this building is special and worthy of fancy roof decorations.
-  if (bottom > 35.0f)
+  //Lowered from 35 so a few more (shorter) buildings qualify -- signs are a bit
+  //more common than the original, now that they are visible at full distance.
+  if (bottom > 25.0f)
     addon = RandomVal (ADDON_COUNT);
   //Build the roof slab
   ConstructCube (left, right, front, back, bottom, bottom + (float)height);
