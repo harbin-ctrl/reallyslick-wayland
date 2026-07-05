@@ -346,10 +346,20 @@ void EntityRender ()
   glBindTexture(GL_TEXTURE_2D, 0);
   glColor3f (0, 0, 0);
   glEnable (GL_BLEND);
+  GLvector cam_pos = CameraPosition();
+  float max_alpha_dist = 150.0f; // Alpha windows vanish into fog quickly
+  float max_alpha_dist_sq = max_alpha_dist * max_alpha_dist;
+
   for (x = 0; x < GRID_SIZE; x++) {
     for (y = 0; y < GRID_SIZE; y++) {
       if (Visible (x,y)) {
-        glCallList (cell_list[x][y].list_alpha);
+        float cell_x = x * GRID_RESOLUTION;
+        float cell_z = y * GRID_RESOLUTION;
+        float dist_x = cell_x - cam_pos.x;
+        float dist_z = cell_z - cam_pos.z;
+        if ((dist_x * dist_x + dist_z * dist_z) < max_alpha_dist_sq) {
+          glCallList (cell_list[x][y].list_alpha);
+        }
       }
     }
   }

@@ -108,10 +108,11 @@ void CarRender ()
   glEnable (GL_BLEND);
   glDisable (GL_CULL_FACE);
   glBlendFunc (GL_ONE, GL_ONE);
-  glBindTexture (GL_TEXTURE_2D, 0);
   glBindTexture(GL_TEXTURE_2D, TextureId (TEXTURE_HEADLIGHT));
+  glBegin (GL_QUADS);
   for (c = head; c; c = c->m_next)
     c->Render ();
+  glEnd ();
   glDepthMask (true);
 
 }
@@ -292,8 +293,6 @@ void CCar::Render ()
     top = 0.0f;
   }
 
-  glBegin (GL_QUADS);
-
   angle = dangles[m_direction];
   pos = m_drive_position;// 
   angle = 360 - (int)MathAngle (m_position.x, m_position.z, pos.x, pos.z);
@@ -310,7 +309,5 @@ void CCar::Render ()
   glVertex3f (pos.x - angles[angle].x,  top, pos.z - angles[angle].y);
   glTexCoord2f (0, 1);   
   glVertex3f (pos.x + angles[angle].x,  top, pos.z +  angles[angle].y);
-  
-  glEnd ();
 
 }

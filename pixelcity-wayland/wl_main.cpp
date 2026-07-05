@@ -389,11 +389,11 @@ int main (int argc, char** argv)
     if (do_benchmark && EntityReady ()) {
       if (frames == 0) clock_gettime (CLOCK_MONOTONIC, &t0);
       frames++;
-      if (frames >= 1000) {
+      if (frames >= 100) {
         struct timespec t1; clock_gettime (CLOCK_MONOTONIC, &t1);
         double dur = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
-        printf ("Benchmark completed: 1000 frames in %.2f seconds (%.2f FPS)\n",
-                dur, 1000.0 / dur);
+        printf ("Benchmark completed: 100 frames in %.2f seconds (%.2f FPS)\n",
+                dur, 100.0 / dur);
         fflush (stdout);
         quit = true;
       }

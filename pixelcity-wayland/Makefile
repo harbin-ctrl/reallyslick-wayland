@@ -29,8 +29,7 @@ SRCS := $(filter-out Win.cpp sdl_main.cpp,$(wildcard *.cpp)) \
 DEPS_TMP := $(SRCS:.cpp=.d)
 DEPS := $(DEPS_TMP:.c=.d)
 
-OBJS_TMP := $(SRCS:.cpp=.o)
-OBJS := $(OBJS_TMP:.c=.o)
+OBJS := Building.o Camera.o Car.o Deco.o Entity.o glBbox.o glMatrix.o glQuat.o glRgba.o glVector2.o glVector3.o Ini.o Light.o Math.o Mesh.o Random.o Render.o Sky.o Texture.o Visible.o wl_main.o World.o time_util.o xdg-shell-protocol.o xdg-decoration-unstable-v1-protocol.o gl_ext.o Shader.o
 
 # wl_main includes the generated headers, so make sure they exist first.
 wl_main.o wl_main.d: xdg-shell-client-protocol.h xdg-decoration-unstable-v1-client-protocol.h

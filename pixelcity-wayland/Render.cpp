@@ -63,6 +63,20 @@
 #include "Render.h"
 #include "Sky.h"
 #include "Texture.h"
+#include "gl_ext.h"
+#include "Shader.h"
+#include "shaders.h"
+
+GLuint main_fbo = 0;
+GLuint main_fbo_tex = 0;
+GLuint main_fbo_depth = 0;
+CShader* post_shader = NULL;
+
+struct font_data {
+  const char* name;
+  GLuint tex;
+};
+
 #include "World.h"
 #include "Win.h"
 #include "time_util.h"
@@ -244,13 +258,14 @@ static void do_effects (int type)
   int             i;
   int             bloom_radius;
   int             bloom_step;
+  float           u, v;
   
   fade = WorldFade ();
   bloom_radius = 15;
   // Wider step -> fewer full-screen bloom quads. Each quad now samples the
   // bloom texture twice (combiner squaring), so trimming the pass count is the
   // main fill-rate lever on the Pi's V3D GPU.
-  bloom_step = bloom_radius / 2;
+  bloom_step = bloom_radius;
   if (!TextureReady ())
     return;
   //Now change projection modes so we can render full-screen effects
@@ -352,6 +367,8 @@ static void do_effects (int type)
     glTexEnvi (GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_PRIMARY_COLOR);
     glTexEnvi (GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
     glActiveTexture (GL_TEXTURE0);
+    u = (float)render_width / 2048.0f;
+    v = (float)render_height / 2048.0f;
     glBegin (GL_QUADS);
     color = WorldBloomColor () * BLOOM_SCALING;
     glColor3fv (&color.red);
@@ -360,9 +377,9 @@ static void do_effects (int type)
         if (abs (x) == abs (y) && x)
           continue;
         glTexCoord2f (0, 0);  glVertex2i (x, y + render_height);
-        glTexCoord2f (0, 1);  glVertex2i (x, y);
-        glTexCoord2f (1, 1);  glVertex2i (x + render_width, y);
-        glTexCoord2f (1, 0);  glVertex2i (x + render_width, y + render_height);
+        glTexCoord2f (0, v);  glVertex2i (x, y);
+        glTexCoord2f (u, v);  glVertex2i (x + render_width, y);
+        glTexCoord2f (u, 0);  glVertex2i (x + render_width, y + render_height);
       }
     }
     glEnd ();
@@ -565,6 +582,30 @@ void RenderResize (void)
   gluPerspective (fovy, render_aspect, 0.1f, RENDER_DISTANCE);
 	glMatrixMode (GL_MODELVIEW);
 
+  if (glGenFramebuffersEXT && glFramebufferTexture2DEXT && glBindFramebufferEXT) {
+    if (!main_fbo) {
+        glGenFramebuffersEXT(1, &main_fbo);
+        glGenTextures(1, &main_fbo_tex);
+        glGenRenderbuffersEXT(1, &main_fbo_depth);
+        if (!post_shader) post_shader = new CShader(bloomVertexShader, bloomFragmentShader);
+    }
+
+    glBindFramebufferEXT(GL_FRAMEBUFFER, main_fbo);
+    
+    glBindTexture(GL_TEXTURE_2D, main_fbo_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, main_fbo_tex, 0);
+
+    glBindRenderbufferEXT(GL_RENDERBUFFER, main_fbo_depth);
+    glRenderbufferStorageEXT(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, render_width, render_height);
+    glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, main_fbo_depth);
+
+    glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
+  }
 }
 
 /*-----------------------------------------------------------------------------
@@ -848,8 +889,8 @@ void RenderInit (void)
   glXSwapBuffers(dpy, WinGetWindow());
 #endif
 
+  LoadGLExtensions();
   RenderResize ();
-
 }
 
 /*-----------------------------------------------------------------------------
@@ -1029,6 +1070,11 @@ void RenderUpdate (void)
 
   frames++;
   do_fps ();
+  
+  if (glBindFramebufferEXT && main_fbo) {
+      glBindFramebufferEXT(GL_FRAMEBUFFER, main_fbo);
+  }
+
   glViewport (0, 0, WinWidth (), WinHeight ());
   glDepthMask (true);
   glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
@@ -1037,7 +1083,7 @@ void RenderUpdate (void)
   if (letterbox) 
     glViewport (0, letterbox_offset, render_width, render_height);
   if (LOADING_SCREEN && TextureReady () && !EntityReady ()) {
-    do_effects (EFFECT_NONE);
+    if (glBindFramebufferEXT && main_fbo) glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
 #ifdef WINDOWS
     SwapBuffers (hDC);
 #elif defined(WAYLAND)
@@ -1097,11 +1143,7 @@ void RenderUpdate (void)
   if (!LOADING_SCREEN) {
     elapsed = 3000 - WorldSceneElapsed ();
     if (elapsed >= 0 && elapsed <= 3000) {
-      RenderFogFX ((float)elapsed / 3000.0f);
-      glDisable (GL_TEXTURE_2D);
-      glEnable (GL_BLEND);
-      glBlendFunc (GL_ONE, GL_ONE);
-      EntityRender ();
+      // Transition effect removed to save 50% geometry draw time
     }
   } 
   if (EntityReady ())
@@ -1112,24 +1154,56 @@ void RenderUpdate (void)
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     EntityRender ();
   }
-  // Bloom source: reuse the frame we just rendered instead of drawing the whole
-  // city a second time. Copy the composited scene (after geometry, before the
-  // FPS/help overlays) straight into the bloom texture; do_effects() blurs it
-  // and adds it back. This replaces the separate full-scene pass in do_bloom().
-  if (RenderBloom () && TextureReady ()) {
-    // Reuse the frame we already drew as the bloom source instead of rendering
-    // the whole city a second time. The source is thresholded in do_effects()
-    // by squaring it (texture combiners), so only bright pixels bloom.
-    glBindTexture (GL_TEXTURE_2D, TextureId (TEXTURE_BLOOM));
-    // We only define level 0 here (at the window's NPOT size), so force a
-    // non-mipmapped filter -- otherwise the texture is mipmap-incomplete and
-    // samples as white, washing the whole frame.
-    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glCopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA,
-                      0, letterbox_offset, render_width, render_height, 0);
+
+  // Draw the post-processing quad
+  if (glBindFramebufferEXT && main_fbo) {
+      glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
+      glViewport (0, 0, WinWidth (), WinHeight ());
+      glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+      glMatrixMode (GL_PROJECTION);
+      glPushMatrix();
+      glLoadIdentity ();
+      glOrtho (0, 1, 1, 0, -1, 1);
+      glMatrixMode (GL_MODELVIEW);
+      glPushMatrix();
+      glLoadIdentity ();
+
+      glDisable(GL_DEPTH_TEST);
+      glDisable(GL_FOG);
+      glDisable(GL_BLEND);
+      glDisable(GL_CULL_FACE);
+      glEnable(GL_TEXTURE_2D);
+
+      if (post_shader && RenderBloom()) {
+          post_shader->Bind();
+          post_shader->SetUniform2f("resolution", (float)render_width, (float)render_height);
+          post_shader->SetUniform1i("tex", 0);
+      }
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, main_fbo_tex);
+
+      glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+      glBegin(GL_QUADS);
+      glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 1.0f);
+      glTexCoord2f(1.0f, 0.0f); glVertex2f(1.0f, 1.0f);
+      glTexCoord2f(1.0f, 1.0f); glVertex2f(1.0f, 0.0f);
+      glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 0.0f);
+      glEnd();
+
+      if (post_shader && RenderBloom()) {
+          post_shader->Unbind();
+      }
+
+      glBindTexture(GL_TEXTURE_2D, 0);
+
+      glMatrixMode (GL_PROJECTION);
+      glPopMatrix();
+      glMatrixMode (GL_MODELVIEW);
+      glPopMatrix();
   }
-  do_effects (effect);
   //Framerate tracker
   if (show_fps) 
     RenderPrint (1, "FPS=%d : Entities=%d : polys=%d", current_fps, EntityCount () + LightCount () + CarCount (), EntityPolyCount () + LightCount () + CarCount ());

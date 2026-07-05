@@ -27,6 +27,8 @@
 #include "Math.h"
 #include "Visible.h"
 #include "World.h"
+#include "Texture.h"
+#include "Render.h"
 #include "Win.h"
 
 static bool          vis_grid[GRID_SIZE][GRID_SIZE];
