@@ -192,7 +192,11 @@ static void kb_key (void*, wl_keyboard*, uint32_t, uint32_t, uint32_t key,
     return;
   xkb_keysym_t sym = xkb_state_key_get_one_sym (xkb_st, key + 8);
   switch (sym) {
-  case XKB_KEY_Escape: quit = true; break;
+  case XKB_KEY_Escape:
+  case XKB_KEY_q:
+  case XKB_KEY_Q:
+    quit = true;
+    break;
   case XKB_KEY_r: case XKB_KEY_R: WorldReset (); break;
   case XKB_KEY_w: case XKB_KEY_W: RenderWireframeToggle (); break;
   case XKB_KEY_e: case XKB_KEY_E: RenderEffectCycle (); break;
