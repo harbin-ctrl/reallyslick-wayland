@@ -45,7 +45,7 @@ wl_main.o wl_main.d: xdg-shell-client-protocol.h xdg-decoration-unstable-v1-clie
 	@$(CXX) -MM -MP -MF $@ $(CPPFLAGS) $<
 
 pixelcity: $(OBJS)
-	g++ -o $@ -g $(OBJS) $(LDFLAGS) -lm -lGL -lGLU
+	g++ -o $@ -g $(OBJS) $(LDFLAGS) -lm -lOpenGL -lGLU
 
 WL_CFLAGS := $(shell pkg-config --cflags wayland-client wayland-egl egl xkbcommon)
 WL_LIBS   := $(shell pkg-config --libs wayland-client wayland-egl egl xkbcommon)

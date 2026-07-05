@@ -26,6 +26,7 @@ private:
   GLrgba                  _trim_color;
   class CMesh*            _mesh;
   class CMesh*            _mesh_flat;
+  class CMesh*            _mesh_lod;
   bool                    _have_lights;
   bool                    _have_trim;
   bool                    _have_logo;
@@ -35,6 +36,7 @@ private:
   void                    CreateBlocky ();
   void                    CreateModern ();
   void                    CreateTower ();
+  void                    CreateLOD ();
   
   float                   ConstructWall (int start_x, int start_y, int start_z, int direction, int length, int height, int window_groups, float uv_start, bool blank_corners);
   void                    ConstructSpike (int left, int right, int front, int back, int bottom, int top);
@@ -46,6 +48,7 @@ public:
                           CBuilding (int type, int x, int y, int height, int width, int depth, int seed, GLrgba color);
   virtual                 ~CBuilding ();
   void                    Render (void);
+  void                    RenderLOD (void);
   int                     PolyCount ();
   void                    RenderFlat (bool colored);
   unsigned                Texture ();

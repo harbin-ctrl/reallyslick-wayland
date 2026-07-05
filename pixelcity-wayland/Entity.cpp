@@ -33,6 +33,7 @@
 #include "World.h"
 #include "Visible.h"
 #include "Win.h"
+#include "Sky.h"
 #include "time_util.h"
 
 class entity
@@ -103,8 +104,9 @@ class entity
 
 struct cell
 {
-  unsigned        list_textured;
-  unsigned        list_flat;
+    GLuint                    list_textured;
+    GLuint                    list_textured_lod;
+    GLuint                    list_flat;
   unsigned        list_flat_wireframe;
   unsigned        list_alpha;
   GLvector        pos;
@@ -188,6 +190,19 @@ static void do_compile ()
     }
   }
   glEndList();	
+
+  // LOD list for distant rendering
+  if (!cell_list[x][y].list_textured_lod)
+    cell_list[x][y].list_textured_lod = glGenLists(1);
+  glNewList (cell_list[x][y].list_textured_lod, GL_COMPILE);
+  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
+    GLvector pos = (*i)->Center ();
+    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && !(*i)->Alpha ()) {
+      glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
+      (*i)->RenderLOD ();
+    }
+  }
+  glEndList();
 
   //Make a list of flat-color stuff (A/C units, ledges, roofs, etc.)
   if (!cell_list[x][y].list_flat)
@@ -354,14 +369,21 @@ void EntityRender ()
       return 0;
   });
 
+  float lod_dist_sq = 100.0f * 100.0f; // Use LOD beyond 100 units
+
   for (int i = 0; i < visible_count; i++) {
-      glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured);
+      if (sorted_cells[i].dist_sq > lod_dist_sq) {
+          glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured_lod);
+      } else {
+          glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured);
+      }
   }
 
   //draw all flat colored objects
   glBindTexture(GL_TEXTURE_2D, 0);
   glColor3f (0, 0, 0);
   for (int i = 0; i < visible_count; i++) {
+      if (sorted_cells[i].dist_sq > lod_dist_sq) continue; // Skip flat details for LOD
       if (wireframe)
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat_wireframe);
       else 
@@ -372,7 +394,7 @@ void EntityRender ()
   glBindTexture(GL_TEXTURE_2D, 0);
   glColor3f (0, 0, 0);
   glEnable (GL_BLEND);
-  float max_alpha_dist = 150.0f; // Alpha windows vanish into fog quickly
+  float max_alpha_dist = 80.0f; // Alpha windows vanish into fog quickly
   float max_alpha_dist_sq = max_alpha_dist * max_alpha_dist;
 
   for (int i = visible_count - 1; i >= 0; i--) {

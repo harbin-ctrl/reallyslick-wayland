@@ -1118,7 +1118,7 @@ void RenderUpdate (void)
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   //Render all the stuff in the whole entire world.
   glDisable (GL_FOG);
-  SkyRender ();
+  SkyRender();
   if (show_fog) {
     glEnable (GL_FOG);
     glFogf (GL_FOG_START, fog_distance - 100);

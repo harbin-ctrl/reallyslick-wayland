@@ -70,6 +70,7 @@ CBuilding::CBuilding (int type, int x, int y, int height, int width, int depth, 
   _trim_color = WorldLightColor (seed);
   _mesh = new CMesh; //The main textured mesh for the building
   _mesh_flat = new CMesh; //Flat-color mesh for untextured detail items.
+  _mesh_lod = new CMesh; //Simple LOD version
   switch (type) {
   case BUILDING_SIMPLE:
     CreateSimple ();
@@ -84,6 +85,7 @@ CBuilding::CBuilding (int type, int x, int y, int height, int width, int depth, 
     CreateBlocky (); 
     break;
   }
+  CreateLOD();
 
 }
 
@@ -98,7 +100,18 @@ CBuilding::~CBuilding ()
     delete _mesh;
   if (_mesh_flat)
     delete _mesh_flat;
+  if (_mesh_lod)
+    delete _mesh_lod;
 
+}
+
+/*-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------*/
+
+void CBuilding::RenderLOD ()
+{
+  _mesh_lod->Render ();
 }
 
 /*-----------------------------------------------------------------------------
@@ -849,3 +862,49 @@ void CBuilding::CreateTower ()
 
 }
 
+
+/*-----------------------------------------------------------------------------
+
+  Create a low-polygon proxy for distant rendering.
+
+-----------------------------------------------------------------------------*/
+
+void CBuilding::CreateLOD ()
+{
+  GLvertex    p;
+  float       x1 = (float)_x;
+  float       x2 = (float)(_x + _width);
+  float       y1 = 0.0f;
+  float       y2 = (float)_height;
+  float       z2 = (float)_y;
+  float       z1 = (float)(_y + _depth);
+
+  quad_strip  qs;
+  for(int i=0; i<10; i++) qs.index_list.push_back(i);
+
+  float u = (float)(RandomVal (SEGMENTS_PER_TEXTURE)) / SEGMENTS_PER_TEXTURE;
+  float v1 = (float)(RandomVal (SEGMENTS_PER_TEXTURE)) / SEGMENTS_PER_TEXTURE;
+  float v2 = v1 + (float)_height * ONE_SEGMENT;
+
+  p.position = glVector (x1, y1, z1);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y2, z1);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
+  u += (float)_depth / SEGMENTS_PER_TEXTURE;
+  
+  p.position = glVector (x1, y1, z2);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y2, z2);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
+  u += (float)_width / SEGMENTS_PER_TEXTURE;
+  
+  p.position = glVector (x2, y1, z2);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x2, y2, z2);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
+  u += (float)_depth / SEGMENTS_PER_TEXTURE;
+  
+  p.position = glVector (x2, y1, z1);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x2, y2, z1);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
+  u += (float)_depth / SEGMENTS_PER_TEXTURE;
+  
+  p.position = glVector (x1, y1, z1);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y2, z1);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
+
+  _mesh_lod->QuadStripAdd (qs);
+  _mesh_lod->Compile ();
+}
