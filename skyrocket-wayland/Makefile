@@ -1,13 +1,19 @@
-TARGET  := skyrocket
-SRCS    := main.cpp skyrocket.cpp skyrocket_flare.cpp skyrocket_particle.cpp \
-           skyrocket_shockwave.cpp skyrocket_smoke.cpp skyrocket_sound.cpp \
-           skyrocket_textures.cpp skyrocket_world.cpp rsMath.c \
-           rsMath/rsMatrix.cpp rsMath/rsQuat.cpp rsMath/rsTrigonometry.c rsMath/rsVec.cpp
-OBJS    := $(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(SRCS)))
+XDG_SHELL_XML := /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
+XDG_DECO_XML  := /usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 
-CXXFLAGS := -O3 -Wall -I. -I./rsMath $(shell pkg-config --cflags sdl2 gl)
-CFLAGS   := -O3 -Wall -I. -I./rsMath $(shell pkg-config --cflags sdl2)
-LIBS     := $(shell pkg-config --libs sdl2 gl) -lGLU -lm
+CXX      := g++
+CC       := gcc
+CXXFLAGS := -O3 -Wall -I. -I./rsMath $(shell pkg-config --cflags wayland-client wayland-egl egl gl)
+CFLAGS   := -O3 -I. -I./rsMath $(shell pkg-config --cflags wayland-client)
+LIBS     := $(shell pkg-config --libs wayland-client wayland-egl egl gl) -lGLU -lm
+
+TARGET  := skyrocket
+HEADERS := xdg-shell-client-protocol.h xdg-decoration-client-protocol.h
+OBJS    := main.o skyrocket.o skyrocket_flare.o skyrocket_particle.o \
+           skyrocket_shockwave.o skyrocket_smoke.o skyrocket_sound.o \
+           skyrocket_textures.o skyrocket_world.o rsMath.o rsMath/rsMatrix.o \
+           rsMath/rsQuat.o rsMath/rsTrigonometry.o rsMath/rsVec.o \
+           xdg-shell-protocol.o xdg-decoration-protocol.o
 
 PREFIX  ?= /usr/local
 BINDIR  := $(PREFIX)/bin
@@ -18,30 +24,50 @@ ICONDIR := $(PREFIX)/share/icons/hicolor
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CXX) -o $@ $(OBJS) $(LIBS)
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
-
-%.o: %.c
+xdg-shell-protocol.o: xdg-shell-protocol.c xdg-shell-client-protocol.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+xdg-decoration-protocol.o: xdg-decoration-protocol.c xdg-decoration-client-protocol.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(TARGET): $(OBJS) $(HEADERS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LIBS)
+
+%.o: %.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+%.o: %.c $(HEADERS)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+xdg-shell-client-protocol.h: $(XDG_SHELL_XML)
+	wayland-scanner client-header < $< > $@
+
+xdg-shell-protocol.c: $(XDG_SHELL_XML)
+	wayland-scanner private-code < $< > $@
+
+xdg-decoration-client-protocol.h: $(XDG_DECO_XML)
+	wayland-scanner client-header < $< > $@
+
+xdg-decoration-protocol.c: $(XDG_DECO_XML)
+	wayland-scanner private-code < $< > $@
+
 install: $(TARGET)
-	install -Dm755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
-	install -Dm644 skyrocket.desktop $(DESTDIR)$(APPDIR)/skyrocket.desktop
+	install -d "$(DESTDIR)$(BINDIR)"
+	install -m 755 $(TARGET) "$(DESTDIR)$(BINDIR)/$(TARGET)"
+	install -d "$(DESTDIR)$(APPDIR)"
+	install -m 644 skyrocket.desktop "$(DESTDIR)$(APPDIR)/skyrocket.desktop"
 	for sz in 16 32 48 64 128 256 512; do \
-		install -Dm644 icons/skyrocket-icon-$${sz}.png \
-			$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/skyrocket.png; \
+		install -d "$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps"; \
+		install -m 644 icons/skyrocket-icon-$${sz}.png "$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/skyrocket.png"; \
 	done
-	-gtk-update-icon-cache -f -t $(DESTDIR)$(ICONDIR) 2>/dev/null || true
-	-update-desktop-database $(DESTDIR)$(APPDIR) 2>/dev/null || true
+	-gtk-update-icon-cache -f -t "$(DESTDIR)$(ICONDIR)" 2>/dev/null || true
+	-update-desktop-database "$(DESTDIR)$(APPDIR)" 2>/dev/null || true
 
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
-	rm -f $(DESTDIR)$(APPDIR)/skyrocket.desktop
+	rm -f "$(DESTDIR)$(BINDIR)/$(TARGET)"
+	rm -f "$(DESTDIR)$(APPDIR)/skyrocket.desktop"
 	for sz in 16 32 48 64 128 256 512; do \
-		rm -f $(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/skyrocket.png; \
+		rm -f "$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/skyrocket.png"; \
 	done
 
 install-user: $(TARGET)
@@ -64,4 +90,4 @@ uninstall-user:
 	done
 
 clean:
-	rm -f $(TARGET) *.o rsMath/*.o
+	rm -f $(TARGET) *.o rsMath/*.o xdg-shell-protocol.c xdg-shell-client-protocol.h xdg-decoration-protocol.c xdg-decoration-client-protocol.h
