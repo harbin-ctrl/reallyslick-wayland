@@ -94,6 +94,7 @@ void LightRender ()
         angles[size][i].y = sinf ((float)i * DEGREES_TO_RADIANS) * ((float)size + 0.5f);
       }
     }
+    angles_done = true;   // table is constant; only build it once
   }
   glDepthMask (false);
   glEnable (GL_BLEND);

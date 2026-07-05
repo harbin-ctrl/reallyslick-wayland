@@ -15,6 +15,7 @@
   
 -----------------------------------------------------------------------------*/
 
+#define BLOOM_UPDATE_INTERVAL 3   // refresh the bloom capture every Nth frame
 #define RANDOM_COLOR_SHIFT  ((float)(RandomVal (10)) / 50.0f)
 #define RANDOM_COLOR_VAL    ((float)(RandomVal (256)) / 256.0f)
 #define RANDOM_COLOR_LIGHT  ((float)(200 + RandomVal (56)) / 256.0f)
@@ -824,10 +825,18 @@ void TextureUpdate (void)
   if (textures_done) {
     if (!RenderBloom ())
       return;
+    // The bloom glow is a soft, low-frequency effect and the camera moves
+    // slowly, so re-capturing the scene into the bloom texture every single
+    // frame is wasted work (a full extra scene pass + a glCopyTexImage2D).
+    // Refresh it every few frames instead; the result is visually identical
+    // but skips most of the cost on fill-rate-bound GPUs.
+    static int bloom_skip = 0;
+    if (bloom_skip++ % BLOOM_UPDATE_INTERVAL != 0)
+      return;
     CTexture*   t;
 
     for (t = head; t; t = t->_next) {
-      if (t->_my_id != TEXTURE_BLOOM) 
+      if (t->_my_id != TEXTURE_BLOOM)
         continue;
       do_bloom (t);
       return;
