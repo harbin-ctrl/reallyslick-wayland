@@ -587,8 +587,10 @@ void RenderResize (void)
       if (s)
         render_scale = (float)atof (s);
       else {
+        // 85% is the default: it holds 60 fps fullscreen and actually looks
+        // better than a razor-sharp 100%. Cycle live with 'S' to taste.
         int pct = IniInt ("RenderScale");
-        render_scale = pct > 0 ? pct / 100.0f : 1.0f;
+        render_scale = pct > 0 ? pct / 100.0f : 0.85f;
       }
       if (render_scale < 0.25f || render_scale > 1.0f)
         render_scale = 1.0f;
@@ -1258,7 +1260,7 @@ void RenderUpdate (void)
   }
   //Framerate tracker
   if (show_fps) 
-    RenderPrint (1, "FPS=%d : Entities=%d : polys=%d", current_fps, EntityCount () + LightCount () + CarCount (), EntityPolyCount () + LightCount () + CarCount ());
+    RenderPrint (1, "FPS=%d : Scale=%d%% : Entities=%d : polys=%d", current_fps, (int)(render_scale * 100.0f + 0.5f), EntityCount () + LightCount () + CarCount (), EntityPolyCount () + LightCount () + CarCount ());
   //Show the help overlay
   if (show_help)
     do_help ();

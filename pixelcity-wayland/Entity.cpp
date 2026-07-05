@@ -375,31 +375,33 @@ void EntityRender ()
   // window-pattern "pop" as buildings crossed the threshold, because a box proxy
   // cannot reproduce the perimeter/tiered window UVs of tower & modern shapes.
   // The LOD mesh is still built (see CBuilding::CreateLOD) but is no longer used.
+  //
+  // Push wall faces slightly away from the camera so coplanar flat detail
+  // (foundations, tier lids, ledges) wins the depth test -- this kills the
+  // mid-distance z-fight on those bands. We bias the walls (not the flat
+  // details) so the overhanging roof caps stay at their true depth and don't
+  // clip the roof-edge lights/trim drawn on top of them later.
+  if (!wireframe) {
+      glEnable (GL_POLYGON_OFFSET_FILL);
+      glPolygonOffset (1.0f, 1.0f);
+  }
   for (int i = 0; i < visible_count; i++) {
       glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured);
   }
+  if (!wireframe) {
+      glPolygonOffset (0.0f, 0.0f);
+      glDisable (GL_POLYGON_OFFSET_FILL);
+  }
 
-  //draw all flat colored objects
+  //draw all flat colored objects (drawn at true depth; the wall pass above is
+  //biased back so these coplanar details win without moving toward the camera)
   glBindTexture(GL_TEXTURE_2D, 0);
   glColor3f (0, 0, 0);
-  //Flat details (foundations, tier lids, ledges, A/C units) are built coplanar
-  //with the wall/LOD-box faces. That is stable up close but z-fights at
-  //mid-distance where depth precision collapses, making bands of windows
-  //flicker. Bias the flat pass toward the camera so it always wins the depth
-  //test against the coplanar walls.
-  if (!wireframe) {
-      glEnable (GL_POLYGON_OFFSET_FILL);
-      glPolygonOffset (-1.0f, -1.0f);
-  }
   for (int i = 0; i < visible_count; i++) {
       if (wireframe)
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat_wireframe);
       else
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat);
-  }
-  if (!wireframe) {
-      glPolygonOffset (0.0f, 0.0f);
-      glDisable (GL_POLYGON_OFFSET_FILL);
   }
 
   //draw all alpha-blended objects (back-to-front for proper blending)
