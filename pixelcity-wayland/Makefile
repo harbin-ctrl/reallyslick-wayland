@@ -99,3 +99,16 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/share/pixmaps/pixelcity.png
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/pixelcity.desktop
 
+install-user: pixelcity
+	install -d $(HOME)/.local/bin
+	install -m 755 pixelcity $(HOME)/.local/bin
+	install -d $(HOME)/.local/share/pixmaps
+	install -m 644 pixelcity.png $(HOME)/.local/share/pixmaps
+	install -d $(HOME)/.local/share/applications
+	install -m 644 pixelcity.desktop $(HOME)/.local/share/applications
+
+uninstall-user:
+	rm -f $(HOME)/.local/bin/pixelcity
+	rm -f $(HOME)/.local/share/pixmaps/pixelcity.png
+	rm -f $(HOME)/.local/share/applications/pixelcity.desktop
+
