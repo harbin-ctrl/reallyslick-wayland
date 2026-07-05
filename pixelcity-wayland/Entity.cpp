@@ -382,12 +382,24 @@ void EntityRender ()
   //draw all flat colored objects
   glBindTexture(GL_TEXTURE_2D, 0);
   glColor3f (0, 0, 0);
+  //Flat details (foundations, tier lids, ledges, A/C units) are built coplanar
+  //with the wall/LOD-box faces. That is stable up close but z-fights at
+  //mid-distance where depth precision collapses, making bands of windows
+  //flicker. Bias the flat pass toward the camera so it always wins the depth
+  //test against the coplanar walls.
+  if (!wireframe) {
+      glEnable (GL_POLYGON_OFFSET_FILL);
+      glPolygonOffset (-1.0f, -1.0f);
+  }
   for (int i = 0; i < visible_count; i++) {
-      //if (sorted_cells[i].dist_sq > lod_dist_sq) continue; // Skip flat details for LOD
       if (wireframe)
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat_wireframe);
-      else 
+      else
           glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat);
+  }
+  if (!wireframe) {
+      glPolygonOffset (0.0f, 0.0f);
+      glDisable (GL_POLYGON_OFFSET_FILL);
   }
 
   //draw all alpha-blended objects (back-to-front for proper blending)

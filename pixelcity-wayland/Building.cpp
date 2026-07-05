@@ -599,7 +599,6 @@ void CBuilding::CreateSimple ()
   GLvertex    p;
   float       x1, x2, z1, z2, y1, y2;
   quad_strip  qs;
-  float       u, v1, v2;
   float       cap_height;
   float       ledge;
 
@@ -619,37 +618,33 @@ void CBuilding::CreateSimple ()
   z2 = (float)_y;
   z1 = (float)(_y + _depth);
 
-  u = (float)(RandomVal (SEGMENTS_PER_TEXTURE)) / SEGMENTS_PER_TEXTURE;
-  v1 = (float)(RandomVal (SEGMENTS_PER_TEXTURE)) / SEGMENTS_PER_TEXTURE;
-  v2 = v1 + (float)_height * ONE_SEGMENT;
+  // World-space UV mapping (identical to ConstructCube and CreateLOD) so windows
+  // tile off world coordinates. This keeps the pattern continuous when the
+  // building swaps between its full mesh and its LOD proxy -- both derive the
+  // same UVs from position, so there is no sudden shift on crossover.
+  p.position = glVector (x1, y1, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y1 * ONE_SEGMENT);
+  _mesh->VertexAdd (p);
+  p.position = glVector (x1, y2, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y2 * ONE_SEGMENT);
+  _mesh->VertexAdd (p);
 
-  p.position = glVector (x1, y1, z1);  p.uv = glVector (u, v1);
+  p.position = glVector (x1, y1, z2);  p.uv = glVector ((x1 + z2) * ONE_SEGMENT, y1 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  p.position = glVector (x1, y2, z1);  p.uv = glVector (u, v2);
+  p.position = glVector (x1, y2, z2);  p.uv = glVector ((x1 + z2) * ONE_SEGMENT, y2 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  u += (float)_depth / SEGMENTS_PER_TEXTURE;
 
-  p.position = glVector (x1, y1, z2);  p.uv = glVector (u, v1);
+  p.position = glVector (x2, y1, z2);  p.uv = glVector ((x2 + z2) * ONE_SEGMENT, y1 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  p.position = glVector (x1, y2, z2);  p.uv = glVector (u, v2);
+  p.position = glVector (x2, y2, z2);  p.uv = glVector ((x2 + z2) * ONE_SEGMENT, y2 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  u += (float)_width / SEGMENTS_PER_TEXTURE;
-  
-  p.position = glVector (x2, y1, z2);  p.uv = glVector (u, v1);
-  _mesh->VertexAdd (p);
-  p.position = glVector (x2, y2, z2);  p.uv = glVector (u, v2);
-  _mesh->VertexAdd (p);
-  u += (float)_depth / SEGMENTS_PER_TEXTURE;
 
-  p.position = glVector (x2, y1, z1);  p.uv = glVector (u, v1);
+  p.position = glVector (x2, y1, z1);  p.uv = glVector ((x2 + z1) * ONE_SEGMENT, y1 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  p.position = glVector (x2, y2, z1);  p.uv = glVector (u, v2);
+  p.position = glVector (x2, y2, z1);  p.uv = glVector ((x2 + z1) * ONE_SEGMENT, y2 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  u += (float)_depth / SEGMENTS_PER_TEXTURE;
 
-  p.position = glVector (x1, y1, z1);  p.uv = glVector (u, v1);
+  p.position = glVector (x1, y1, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y1 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
-  p.position = glVector (x1, y2, z1);  p.uv = glVector (u, v2);
+  p.position = glVector (x1, y2, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y2 * ONE_SEGMENT);
   _mesh->VertexAdd (p);
 
   _mesh->QuadStripAdd (qs);
@@ -884,28 +879,24 @@ void CBuilding::CreateLOD ()
   quad_strip  qs;
   for(int i=0; i<10; i++) qs.index_list.push_back(i);
 
-  float u = (float)(RandomVal (SEGMENTS_PER_TEXTURE)) / SEGMENTS_PER_TEXTURE;
-  float v1 = (float)(RandomVal (SEGMENTS_PER_TEXTURE)) / SEGMENTS_PER_TEXTURE;
-  float v2 = v1 + (float)_height * ONE_SEGMENT;
+  // World-space UVs, matching CreateSimple / ConstructCube exactly. Because both
+  // the full mesh and this proxy derive UVs purely from vertex position, the
+  // window pattern is identical across the full<->LOD crossover -- no shift, no
+  // consumption of the random sequence (which used to desync the whole city).
+  p.position = glVector (x1, y1, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y1 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y2, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y2 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
 
-  p.position = glVector (x1, y1, z1);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
-  p.position = glVector (x1, y2, z1);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
-  u += (float)_depth / SEGMENTS_PER_TEXTURE;
-  
-  p.position = glVector (x1, y1, z2);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
-  p.position = glVector (x1, y2, z2);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
-  u += (float)_width / SEGMENTS_PER_TEXTURE;
-  
-  p.position = glVector (x2, y1, z2);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
-  p.position = glVector (x2, y2, z2);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
-  u += (float)_depth / SEGMENTS_PER_TEXTURE;
-  
-  p.position = glVector (x2, y1, z1);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
-  p.position = glVector (x2, y2, z1);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
-  u += (float)_depth / SEGMENTS_PER_TEXTURE;
-  
-  p.position = glVector (x1, y1, z1);  p.uv = glVector (u, v1); _mesh_lod->VertexAdd (p);
-  p.position = glVector (x1, y2, z1);  p.uv = glVector (u, v2); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y1, z2);  p.uv = glVector ((x1 + z2) * ONE_SEGMENT, y1 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y2, z2);  p.uv = glVector ((x1 + z2) * ONE_SEGMENT, y2 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+
+  p.position = glVector (x2, y1, z2);  p.uv = glVector ((x2 + z2) * ONE_SEGMENT, y1 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x2, y2, z2);  p.uv = glVector ((x2 + z2) * ONE_SEGMENT, y2 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+
+  p.position = glVector (x2, y1, z1);  p.uv = glVector ((x2 + z1) * ONE_SEGMENT, y1 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x2, y2, z1);  p.uv = glVector ((x2 + z1) * ONE_SEGMENT, y2 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+
+  p.position = glVector (x1, y1, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y1 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
+  p.position = glVector (x1, y2, z1);  p.uv = glVector ((x1 + z1) * ONE_SEGMENT, y2 * ONE_SEGMENT); _mesh_lod->VertexAdd (p);
 
   _mesh_lod->QuadStripAdd (qs);
   _mesh_lod->Compile ();
