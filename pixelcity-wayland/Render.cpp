@@ -793,7 +793,7 @@ void RenderInit (void)
 	  SelectObject(hDC, oldfont);
 	  DeleteObject(font);		
   }
-#elif defined(WAYLAND_SDL2)
+#elif defined(WAYLAND)
   if(!RenderLoadFonts(NULL, NULL)) {
     std::cerr << "Couldn't load fonts...\n";
     return;
@@ -841,7 +841,7 @@ void RenderInit (void)
 
 #ifdef WINDOWS
   SwapBuffers (hDC);
-#elif defined(WAYLAND_SDL2)
+#elif defined(WAYLAND)
   // Swapped externally
 #else
   glFlush();
@@ -1040,7 +1040,7 @@ void RenderUpdate (void)
     do_effects (EFFECT_NONE);
 #ifdef WINDOWS
     SwapBuffers (hDC);
-#elif defined(WAYLAND_SDL2)
+#elif defined(WAYLAND)
   // Swapped externally
 #else
     glXSwapBuffers(WinGetDisplay(), WinGetWindow());
@@ -1139,7 +1139,7 @@ void RenderUpdate (void)
 
 #ifdef WINDOWS
   SwapBuffers (hDC);
-#elif defined(WAYLAND_SDL2)
+#elif defined(WAYLAND)
   // Swapped externally
 #else
   glXSwapBuffers(WinGetDisplay(), WinGetWindow());
