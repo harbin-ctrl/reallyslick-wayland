@@ -7,7 +7,7 @@
 #define TRIM_ROWS             4
 #define TRIM_SIZE             (1.0f / TRIM_ROWS)
 #define TRIM_PIXELS           (TRIM_RESOLUTION / TRIM_ROWS)
-#define LOGO_RESOLUTION       512
+#define LOGO_RESOLUTION       1024
 #define LOGO_ROWS             16
 #define LOGO_SIZE             (1.0f / LOGO_ROWS)
 #define LOGO_PIXELS           (LOGO_RESOLUTION / LOGO_ROWS)
