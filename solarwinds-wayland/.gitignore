@@ -1,0 +1,4 @@
+solarwinds
+solarwinds_orig
+*.o
+**/*.o
