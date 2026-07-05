@@ -15,7 +15,7 @@ BINDIR  := $(PREFIX)/bin
 APPDIR  := $(PREFIX)/share/applications
 ICONDIR := $(PREFIX)/share/icons/hicolor
 
-.PHONY: all clean install uninstall
+.PHONY: all clean install uninstall install-user uninstall-user
 
 all: $(TARGET)
 
@@ -56,6 +56,12 @@ uninstall:
 	for sz in 16 32 48 64 128 256 512; do \
 		rm -f $(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
 	done
+
+install-user: $(TARGET)
+	$(MAKE) install PREFIX=$(HOME)/.local
+
+uninstall-user:
+	$(MAKE) uninstall PREFIX=$(HOME)/.local
 
 clean:
 	rm -f $(TARGET) xdg-shell-client-protocol.h xdg-shell-protocol.c \
