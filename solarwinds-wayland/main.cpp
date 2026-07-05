@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
             if (event.type == SDL_QUIT) {
                 running = false;
             } else if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
+                if (event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_q) {
                     running = false;
                 } else if (event.key.keysym.sym == SDLK_f || event.key.keysym.sym == SDLK_F11) {
                     fullscreen = !fullscreen;
