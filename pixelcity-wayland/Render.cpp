@@ -250,9 +250,16 @@ static void do_progress (float center_x, float center_y, float radius, float opa
 
 }
 
-/*-----------------------------------------------------------------------------
+extern float TextureProgress ();
+extern float EntityProgress ();
 
------------------------------------------------------------------------------*/
+static float LoadProgress ()
+{
+  if (!TextureReady ()) {
+    return TextureProgress () * 0.5f;
+  }
+  return 0.5f + EntityProgress () * 0.5f;
+}
 
 static void do_effects (int type)
 {
@@ -273,7 +280,7 @@ static void do_effects (int type)
   // bloom texture twice (combiner squaring), so trimming the pass count is the
   // main fill-rate lever on the Pi's V3D GPU.
   bloom_step = bloom_radius;
-  if (!TextureReady ())
+  if (!TextureReady () && type != EFFECT_NONE)
     return;
   //Now change projection modes so we can render full-screen effects
   glMatrixMode (GL_PROJECTION);
@@ -427,10 +434,11 @@ static void do_effects (int type)
       glVertex2i (render_width, 0);
       glEnd ();
     }
-    if (TextureReady () && !EntityReady () && fade != 0.0f) {
+    if (!EntityReady () && fade != 0.0f) {
       radius = render_width / 16;
-      do_progress ((float)render_width / 2, (float)render_height / 2, (float)radius, fade, EntityProgress ());
-      RenderPrint (render_width / 2 - LOGO_PIXELS, render_height / 2 + LOGO_PIXELS, 0, glRgba (0.5f), "%1.2f%%", EntityProgress () * 100.0f);
+      float progress = LoadProgress ();
+      do_progress ((float)render_width / 2, (float)render_height / 2, (float)radius, fade, progress);
+      RenderPrint (render_width / 2 - LOGO_PIXELS, render_height / 2 + LOGO_PIXELS, 0, glRgba (0.5f), "%1.2f%%", progress * 100.0f);
       RenderPrint (1, "%s v%d.%d.%03d", APP_TITLE, VERSION_MAJOR, VERSION_MINOR, VERSION_REVISION);
     }
   }
@@ -1012,7 +1020,7 @@ void RenderUpdate (void)
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   if (letterbox)
     glViewport (0, (int)(letterbox_offset * render_scale), fbo_width, fbo_height);
-  if (LOADING_SCREEN && TextureReady () && !EntityReady ()) {
+  if (LOADING_SCREEN && !EntityReady ()) {
     if (glBindFramebufferEXT && main_fbo) glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
     do_effects (EFFECT_NONE);
 #ifdef WINDOWS
