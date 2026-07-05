@@ -128,7 +128,12 @@ void VisibleUpdate (void)
       angle_to = 180 - MathAngle (target_x, target_z, position.x, position.z);
       //Store how many degrees the cell is to the 
       angle_diff = (float)fabs (MathAngleDifference (angle.y, angle_to));
-      vis_grid[x][y] = angle_diff < 45;
+      // Distance culling: don't draw cells beyond the fog
+      float dist_x = target_x - position.x;
+      float dist_z = target_z - position.z;
+      float fog_dist = RenderFogDistance() + GRID_RESOLUTION; // Add a cell radius for safety
+      bool within_distance = (dist_x * dist_x + dist_z * dist_z) < (fog_dist * fog_dist);
+      vis_grid[x][y] = (angle_diff < 45) && within_distance;
     }
   }
 
