@@ -1014,6 +1014,7 @@ void RenderUpdate (void)
     glViewport (0, (int)(letterbox_offset * render_scale), fbo_width, fbo_height);
   if (LOADING_SCREEN && TextureReady () && !EntityReady ()) {
     if (glBindFramebufferEXT && main_fbo) glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
+    do_effects (EFFECT_NONE);
 #ifdef WINDOWS
     SwapBuffers (hDC);
 #elif defined(WAYLAND)
