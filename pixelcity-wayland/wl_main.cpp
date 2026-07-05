@@ -375,6 +375,7 @@ int main (int argc, char** argv)
   struct timespec t0; clock_gettime (CLOCK_MONOTONIC, &t0);
   int frames = 0;
 
+
   while (!quit) {
     pump_events ();
     if (resize_pending) {

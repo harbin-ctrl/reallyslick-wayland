@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#define GL_GLEXT_PROTOTYPES   // expose glGenerateMipmap (core GL 3.0)
 #include <GL/gl.h>
 #include <GL/glu.h>
 
@@ -214,17 +215,13 @@ void drawrect (int left, int top, int right, int bottom, GLrgba color)
   float     average;
   float     hue;
   int       potential;
-  int       repeats;
   int       height;
   int       i, j;
   bool      bright;
   GLrgba    color_noise;
 
-  glDisable (GL_CULL_FACE);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glEnable (GL_BLEND);
-  glLineWidth (1.0f);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  // GL state (cull, blend, line width, polygon mode) is now set once in
+  // DrawWindows() rather than redundantly on every call.
   glColor3fv (&color.red);
 
   if (left == right) { //in low resolution, a "rect" might be 1 pixel wide
@@ -251,26 +248,25 @@ void drawrect (int left, int top, int right, int bottom, GLrgba color)
     potential = (int)(average * 255.0f);
 
     if (bright) {
-      glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       glBegin (GL_POINTS);
       for (i = left + 1; i < right - 1; i++) {
         for (j = top + 1; j < bottom - 1; j++) {
-          glColor4i (255, 0, RandomVal (potential), 255);
           hue = 0.2f + (float)RandomVal (100) / 300.0f + (float)RandomVal (100) / 300.0f + (float)RandomVal (100) / 300.0f;
           color_noise = glRgbaFromHsl (hue, 0.3f, 0.5f);
           color_noise.alpha = (float)RandomVal (potential) / 144.0f;
-          glColor4f (RANDOM_COLOR_VAL, RANDOM_COLOR_VAL, RANDOM_COLOR_VAL, (float)RandomVal (potential) / 144.0f);
           glColor4fv (&color_noise.red);
           glVertex2i (i, j);
         }
       }
       glEnd ();
     }
-    repeats = RandomVal (6) + 1;
+    // Vertical noise lines across the window — batched into a single
+    // GL_LINES block instead of one glBegin/glEnd per column.
     height = (bottom - top) + (RandomVal (3) - 1) + (RandomVal(3) - 1);
+    glBegin (GL_LINES);
     for (i = left; i < right; i++) {
       if (RandomVal (3) == 0)
-        repeats = RandomVal (4) + 1;
+        RandomVal (4);  // consume the RNG value for compatibility
       if (RandomVal (6) == 0) {
         height = bottom - top;
         height = RandomVal (height);
@@ -278,15 +274,12 @@ void drawrect (int left, int top, int right, int bottom, GLrgba color)
         height = RandomVal (height);
         height = ((bottom - top) + height) / 2;
       }
-      for (j = 0; j < 1; j++) {
-        glBegin (GL_LINES);
-        glColor4f (0, 0, 0, (float)RandomVal (256) / 256.0f);
-        glVertex2i (i, bottom - height);
-        glColor4f (0, 0, 0, (float)RandomVal (256) / 256.0f);
-        glVertex2i (i, bottom);
-        glEnd ();
-      }
+      glColor4f (0, 0, 0, (float)RandomVal (256) / 256.0f);
+      glVertex2i (i, bottom - height);
+      glColor4f (0, 0, 0, (float)RandomVal (256) / 256.0f);
+      glVertex2i (i, bottom);
     }
+    glEnd ();
   }
 }
 
@@ -385,6 +378,13 @@ void CTexture::DrawWindows ()
   int         lit_density = 2 + RandomVal(2) + RandomVal(2);
   GLrgba      color;
   bool        lit = false;
+
+  // Set GL state once for all windows (drawrect no longer sets it per call).
+  glDisable (GL_CULL_FACE);
+  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable (GL_BLEND);
+  glLineWidth (1.0f);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
   //color = glRgbaUnique (_my_id);
   for (y = 0; y < SEGMENTS_PER_TEXTURE; y++)  {
@@ -555,7 +555,6 @@ void CTexture::Rebuild ()
   float           radius;
   GLvector2       pos;
   bool            use_framebuffer;
-  unsigned char*  bits;
   unsigned        start;
   int             lapsed;
 
@@ -709,10 +708,11 @@ void CTexture::Rebuild ()
 	  glCopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, _size, _size, 0);
   }
   if (_mipmap) {
-    bits = new unsigned char[_size * _size * 4];
-    glGetTexImage (GL_TEXTURE_2D,	0, GL_RGBA, GL_UNSIGNED_BYTE, bits);
-    gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGBA, _size, _size, GL_RGBA, GL_UNSIGNED_BYTE, bits);
-    delete[] bits;
+    // Generate mip levels on the GPU from level 0 (already filled by the
+    // glCopyTexImage2D above). The old path read the whole texture back to the
+    // CPU (glGetTexImage) and rebuilt every level in software (gluBuild2DMipmaps)
+    // -- ~85ms per texture on the Pi's V3D and the dominant city-load cost.
+    glGenerateMipmap (GL_TEXTURE_2D);
 	  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
 	  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
   } else
