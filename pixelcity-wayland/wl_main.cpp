@@ -202,7 +202,7 @@ static void kb_key (void*, wl_keyboard*, uint32_t, uint32_t, uint32_t key,
   case XKB_KEY_p: case XKB_KEY_P: RenderFPSToggle (); break;
   case XKB_KEY_s: case XKB_KEY_S: RenderScaleCycle (); break;
   case XKB_KEY_F1: RenderHelpToggle (); break;
-  case XKB_KEY_f: case XKB_KEY_F:
+  case XKB_KEY_f: case XKB_KEY_F: case XKB_KEY_F11:
     is_fullscreen = !is_fullscreen;
     if (is_fullscreen) xdg_toplevel_set_fullscreen (toplevel, NULL);
     else               xdg_toplevel_unset_fullscreen (toplevel);
