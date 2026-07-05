@@ -106,6 +106,15 @@ void LightRender ()
   glBlendFunc (GL_ONE, GL_ONE);
   glBindTexture(GL_TEXTURE_2D, TextureId (TEXTURE_LIGHT));
   glDisable (GL_CULL_FACE);
+  // Roof lights sit right on the building's corner edges, so the camera-facing
+  // billboard is coincident in depth with the opaque geometry behind it. Being
+  // depth-tested, that causes z-fighting: near, a flickering black line down the
+  // exact center (the corner edge); far, whole lights blinking as precision
+  // collapses. Bias the billboards a couple of depth units toward the camera so
+  // they reliably win against the surface they're mounted on. A genuinely nearer
+  // building is many units closer, so it still occludes them correctly.
+  glEnable (GL_POLYGON_OFFSET_FILL);
+  glPolygonOffset (-1.0f, -2.0f);
   glBegin (GL_QUADS);
   for (int x = 0; x < GRID_SIZE; x++) {
     for (int y = 0; y < GRID_SIZE; y++) {
@@ -117,6 +126,8 @@ void LightRender ()
     }
   }
   glEnd ();
+  glPolygonOffset (0.0f, 0.0f);
+  glDisable (GL_POLYGON_OFFSET_FILL);
   glDepthMask (true);
 
 }
