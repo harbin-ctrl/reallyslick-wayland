@@ -5,4 +5,4 @@ Comment=Procedural city renderer with retro-synthwave aesthetics
 Exec=pixelcity
 Icon=pixelcity
 Terminal=false
-Categories=Game;Simulation;
+Categories=DesktopToy;

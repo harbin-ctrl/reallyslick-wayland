@@ -24,6 +24,15 @@ fi
 echo "Installing PixelCity system-wide..."
 $SUDO make -C "${ROOT_DIR}" install
 
+echo "Updating system desktop database and icon cache..."
+$SUDO update-desktop-database /usr/local/share/applications || true
+if [ -d /usr/local/share/icons/hicolor ]; then
+    $SUDO gtk-update-icon-cache -f -t /usr/local/share/icons/hicolor || true
+fi
+if command -v lxpanelctl >/dev/null 2>&1; then
+    lxpanelctl restart || true
+fi
+
 # Restore ownership of any files generated as root during installation
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
     sudo chown -R "$(id -u):$(id -g)" "${ROOT_DIR}"
