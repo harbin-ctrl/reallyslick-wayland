@@ -545,6 +545,42 @@ void CTexture::DrawHeadlight ()
                     
 -----------------------------------------------------------------------------*/
 
+// Off-screen target used to bake textures. Rendering into a texture-sized FBO
+// (instead of the window) decouples bake resolution from the window size, so a
+// small startup window no longer caps logo/sky/building texture quality -- the
+// city looks right the moment the user switches to fullscreen. Returns false if
+// FBO objects are unavailable, in which case Rebuild falls back to the window.
+// Uses core FBO entry points directly (this file defines GL_GLEXT_PROTOTYPES,
+// as it already does for glGenerateMipmap) rather than the EXT pointers.
+static GLuint bake_fbo = 0, bake_color = 0, bake_depth = 0;
+static int    bake_size = 0;
+
+static bool TextureBakeFboBind (int size)
+{
+  if (!bake_fbo) {
+    glGenFramebuffers (1, &bake_fbo);
+    glGenRenderbuffers (1, &bake_color);
+    glGenRenderbuffers (1, &bake_depth);
+  }
+  glBindFramebuffer (GL_FRAMEBUFFER, bake_fbo);
+  if (size != bake_size) {
+    glBindRenderbuffer (GL_RENDERBUFFER, bake_color);
+    glRenderbufferStorage (GL_RENDERBUFFER, GL_RGBA8, size, size);
+    glFramebufferRenderbuffer (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_RENDERBUFFER, bake_color);
+    glBindRenderbuffer (GL_RENDERBUFFER, bake_depth);
+    glRenderbufferStorage (GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size, size);
+    glFramebufferRenderbuffer (GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                               GL_RENDERBUFFER, bake_depth);
+    bake_size = size;
+  }
+  if (glCheckFramebufferStatus (GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    glBindFramebuffer (GL_FRAMEBUFFER, 0);
+    return false;
+  }
+  return true;
+}
+
 void CTexture::Rebuild ()
 {
 
@@ -555,16 +591,35 @@ void CTexture::Rebuild ()
   float           radius;
   GLvector2       pos;
   bool            use_framebuffer;
+  bool            bake_to_fbo;
   unsigned        start;
   int             lapsed;
 
   start = GetTimeInMillis ();
-  //Since we make textures by drawing into the viewport, we can't make them bigger 
-  //than the current view.
   _size = _desired_size;
+  //Normally we bake by drawing into the window viewport, so a texture can't be
+  //bigger than the view. Only when the desired size exceeds that (e.g. the 1024
+  //logo atlas while the window is a small 800x600 at startup) do we bake into an
+  //off-screen FBO instead -- limited only by GL_MAX_TEXTURE_SIZE -- so a small
+  //startup window no longer permanently caps that texture's resolution. This
+  //keeps every window-sized texture on the original, proven bake path.
   max_size = RenderMaxTextureSize ();
-  while (_size > max_size)
-    _size /= 2;
+  bake_to_fbo = false;
+  if (_size > max_size) {
+    int gl_max = 0;
+    glGetIntegerv (GL_MAX_TEXTURE_SIZE, &gl_max);
+    int want = _desired_size;
+    while (gl_max > 0 && want > gl_max)
+      want /= 2;
+    if (TextureBakeFboBind (want)) {
+      _size = want;
+      bake_to_fbo = true;
+    }
+  }
+  if (!bake_to_fbo) {
+    while (_size > max_size)
+      _size /= 2;
+  }
   glBindTexture(GL_TEXTURE_2D, _glid);
   //Set up the texture
   glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, _size, _size, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -718,7 +773,9 @@ void CTexture::Rebuild ()
   } else
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
   //cleanup and restore the viewport
-  RenderResize ();  
+  if (bake_to_fbo)
+    glBindFramebuffer (GL_FRAMEBUFFER, 0);
+  RenderResize ();
   _ready = true;
   lapsed = GetTimeInMillis () - start;
   build_time += lapsed;
