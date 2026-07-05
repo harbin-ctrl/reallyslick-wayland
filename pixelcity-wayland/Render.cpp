@@ -1103,8 +1103,9 @@ void RenderUpdate (void)
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glMatrixMode (GL_TEXTURE);
   glLoadIdentity();
-	glMatrixMode (GL_MODELVIEW);
-  glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+  glMatrixMode (GL_MODELVIEW);
+  glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
+  glHint(GL_FOG_HINT, GL_FASTEST);
   glLoadIdentity();
   glLineWidth (1.0f);
   pos = CameraPosition ();

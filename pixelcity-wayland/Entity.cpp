@@ -323,47 +323,63 @@ void EntityRender ()
     else
       return;
   }
-  for (x = 0; x < GRID_SIZE; x++) {
-    for (y = 0; y < GRID_SIZE; y++) {
-      if (Visible (x,y))
-        glCallList (cell_list[x][y].list_textured);
-    }
-  }
-  //draw all flat colored objects
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glColor3f (0, 0, 0);
-  for (x = 0; x < GRID_SIZE; x++) {
-    for (y = 0; y < GRID_SIZE; y++) {
-      if (Visible (x, y)) {
-        if (wireframe)
-          glCallList (cell_list[x][y].list_flat_wireframe);
-        else 
-          glCallList (cell_list[x][y].list_flat);
-      }
-    }
-  }
-  //draw all alpha-blended objects
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glColor3f (0, 0, 0);
-  glEnable (GL_BLEND);
   GLvector cam_pos = CameraPosition();
-  float max_alpha_dist = 150.0f; // Alpha windows vanish into fog quickly
-  float max_alpha_dist_sq = max_alpha_dist * max_alpha_dist;
-
+  
+  struct cell_dist {
+      int x, y;
+      float dist_sq;
+  };
+  static cell_dist sorted_cells[GRID_SIZE * GRID_SIZE];
+  int visible_count = 0;
+  
   for (x = 0; x < GRID_SIZE; x++) {
     for (y = 0; y < GRID_SIZE; y++) {
-      if (Visible (x,y)) {
-        float cell_x = x * GRID_RESOLUTION;
-        float cell_z = y * GRID_RESOLUTION;
-        float dist_x = cell_x - cam_pos.x;
-        float dist_z = cell_z - cam_pos.z;
-        if ((dist_x * dist_x + dist_z * dist_z) < max_alpha_dist_sq) {
-          glCallList (cell_list[x][y].list_alpha);
-        }
+      if (Visible(x, y)) {
+        sorted_cells[visible_count].x = x;
+        sorted_cells[visible_count].y = y;
+        float dx = (x * GRID_RESOLUTION) - cam_pos.x;
+        float dz = (y * GRID_RESOLUTION) - cam_pos.z;
+        sorted_cells[visible_count].dist_sq = dx*dx + dz*dz;
+        visible_count++;
       }
     }
   }
   
+  // Sort front-to-back
+  qsort(sorted_cells, visible_count, sizeof(cell_dist), [](const void* a, const void* b) -> int {
+      float da = ((const cell_dist*)a)->dist_sq;
+      float db = ((const cell_dist*)b)->dist_sq;
+      if (da > db) return 1;
+      if (da < db) return -1;
+      return 0;
+  });
+
+  for (int i = 0; i < visible_count; i++) {
+      glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured);
+  }
+
+  //draw all flat colored objects
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glColor3f (0, 0, 0);
+  for (int i = 0; i < visible_count; i++) {
+      if (wireframe)
+          glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat_wireframe);
+      else 
+          glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_flat);
+  }
+
+  //draw all alpha-blended objects (back-to-front for proper blending)
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glColor3f (0, 0, 0);
+  glEnable (GL_BLEND);
+  float max_alpha_dist = 150.0f; // Alpha windows vanish into fog quickly
+  float max_alpha_dist_sq = max_alpha_dist * max_alpha_dist;
+
+  for (int i = visible_count - 1; i >= 0; i--) {
+      if (sorted_cells[i].dist_sq < max_alpha_dist_sq) {
+          glCallList (cell_list[sorted_cells[i].x][sorted_cells[i].y].list_alpha);
+      }
+  }
 }
 
 

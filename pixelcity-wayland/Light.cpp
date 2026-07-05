@@ -38,11 +38,13 @@
 #include "Random.h"
 #include "Render.h"
 #include "Texture.h"
+#include "World.h"
 #include "Visible.h"
+#include "Win.h"
 #include "time_util.h"
 
 static GLvector2      angles[5][360];
-static CLight*        head;
+static CLight*        light_grid[GRID_SIZE][GRID_SIZE];
 static bool           angles_done;
 static int            count;
 
@@ -55,10 +57,14 @@ void LightClear ()
 
   CLight*   l;
 
-  while (head) {
-    l = head;
-    head = l->_next;
-    delete l;
+  for (int x = 0; x < GRID_SIZE; x++) {
+    for (int y = 0; y < GRID_SIZE; y++) {
+      while (light_grid[x][y]) {
+        l = light_grid[x][y];
+        light_grid[x][y] = l->_next;
+        delete l;
+      }
+    }
   }
   count = 0;
 
@@ -83,8 +89,6 @@ int LightCount ()
 void LightRender ()
 {
 
-  CLight*     l;
-
   if (!EntityReady ())
     return;
   if (!angles_done) {
@@ -103,8 +107,15 @@ void LightRender ()
   glBindTexture(GL_TEXTURE_2D, TextureId (TEXTURE_LIGHT));
   glDisable (GL_CULL_FACE);
   glBegin (GL_QUADS);
-  for (l = head; l; l = l->_next) 
-    l->Render ();
+  for (int x = 0; x < GRID_SIZE; x++) {
+    for (int y = 0; y < GRID_SIZE; y++) {
+      if (Visible(x, y)) {
+        for (CLight* l = light_grid[x][y]; l; l = l->_next) {
+          l->Render();
+        }
+      }
+    }
+  }
   glEnd ();
   glDepthMask (true);
 
@@ -123,10 +134,10 @@ CLight::CLight (GLvector pos, GLrgba color, int size)
   _vert_size = (float)_size + 0.5f;
   _flat_size = _vert_size + 0.5f;
   _blink = false;
-  _cell_x = WORLD_TO_GRID(pos.x);
-  _cell_z = WORLD_TO_GRID(pos.z);
-  _next = head;
-  head = this;
+  _cell_x = CLAMP(WORLD_TO_GRID(pos.x), 0, GRID_SIZE - 1);
+  _cell_z = CLAMP(WORLD_TO_GRID(pos.z), 0, GRID_SIZE - 1);
+  _next = light_grid[_cell_x][_cell_z];
+  light_grid[_cell_x][_cell_z] = this;
   count++;
 
 
@@ -159,8 +170,7 @@ void CLight::Render ()
   GLvector  camera_position;
   GLvector2 offset;
 
-  if (!Visible (_cell_x, _cell_z))
-    return;
+  // Visible check now handled by LightRender
   camera = CameraAngle ();
   camera_position = CameraPosition ();
   if (fabs (camera_position.x - _position.x) > RenderFogDistance ())
