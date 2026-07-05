@@ -50,6 +50,9 @@
 #include <fontconfig/fcfreetype.h>
 
 #include <errno.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
 #endif
 
 #include "glTypes.h"
@@ -125,15 +128,18 @@ struct glFont
 {
   const char*   name;
   unsigned		  base_char;
-} fonts[] = 
+} fonts[] =
 {
-  {"Courier New",      0},
-  {"Arial",            0},
-  {"Times New Roman",  0},
-  {"Arial Black",      0},
-  {"Impact",           0},
-  {"Agency FB",        0},
-  {"Book Antiqua",     0},
+  // Bundled OFL display faces (fonts/), loaded by file so the signage looks the
+  // same on every machine instead of depending on fontconfig's substitution.
+  // A spread of heavy / condensed / techno faces suited to neon city signage.
+  {"Anton-Regular.ttf",        0},   // ultra-heavy grotesque (Impact-like)
+  {"ArchivoBlack-Regular.ttf", 0},   // heavy grotesque (Arial Black-like)
+  {"BebasNeue-Regular.ttf",    0},   // tall condensed caps
+  {"RussoOne-Regular.ttf",     0},   // bold squared display
+  {"Rajdhani-Bold.ttf",        0},   // squared techno bold
+  {"SairaCondensed-Bold.ttf",  0},   // condensed bold
+  {"Audiowide-Regular.ttf",    0},   // retro-neon display
 };
 
 #if SCREENSAVER
@@ -668,13 +674,46 @@ void RenderTerm (void)
 
 #ifndef WINDOWS
 
+// Open one of the bundled fonts by basename. Looks next to the executable
+// first (fonts/<name>), then in the CWD, then falls back to a system DejaVu
+// bold so the toy still renders text if the fonts/ dir is missing.
+static FT_Face RenderOpenBundledFace (FT_Library lib, const char *basename)
+{
+  FT_Face  face = NULL;
+  char     path[1024];
+  char     exe[1024];
+  ssize_t  n;
+
+  n = readlink ("/proc/self/exe", exe, sizeof (exe) - 1);
+  if (n > 0) {
+    exe[n] = '\0';
+    char *slash = strrchr (exe, '/');
+    if (slash) {
+      *slash = '\0';
+      snprintf (path, sizeof (path), "%s/fonts/%s", exe, basename);
+      if (!FT_New_Face (lib, path, 0, &face))
+        return face;
+    }
+  }
+
+  snprintf (path, sizeof (path), "fonts/%s", basename);
+  if (!FT_New_Face (lib, path, 0, &face))
+    return face;
+
+  if (!FT_New_Face (lib, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    0, &face)) {
+    std::cerr << "Bundled font '" << basename << "' not found; using DejaVu.\n";
+    return face;
+  }
+
+  return NULL;
+}
+
 static bool RenderLoadFonts(Display *dpy, Visual *vis)
 {
   FT_Error     err;
   FT_Library   lib;
-  FcPattern    *pattern, *font;
   FT_Face      face;
-  FcResult     res;
   bool         del_face;
   GLubyte      *bits;
   GLint        alignment;
@@ -685,11 +724,6 @@ static bool RenderLoadFonts(Display *dpy, Visual *vis)
     return false;
   }
 
-  if(!FcInit()) {
-    std::cerr << "FcInit() failed: " << strerror(errno) << "\n";
-    return false;
-  }
-
   glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -697,79 +731,14 @@ static bool RenderLoadFonts(Display *dpy, Visual *vis)
     str[j] = j+32;
 
   for(unsigned int i = 0; i < FONT_COUNT; i++) {
-    pattern = FcPatternBuild(NULL,
-        FC_FAMILY, FcTypeString, fonts[i].name,
-        FC_SIZE, FcTypeDouble, static_cast<double>(FONT_SIZE),
-        FC_WEIGHT, FcTypeInteger, FC_WEIGHT_BOLD,
-        (char *)0);
+    face = RenderOpenBundledFace(lib, fonts[i].name);
 
-    if(!pattern) {
-      std::cerr << "FcPatternBuild returned null; face = '" << fonts[i].name << "'...\n";
+    if(!face) {
+      std::cerr << "Couldn't load any font for '" << fonts[i].name << "'.\n";
       return false;
     }
 
-    if(!FcConfigSubstitute(NULL, pattern, FcMatchPattern)) {
-      std::cerr << "FcConfigSubstitute failed; face = '" << fonts[i].name << "'...\n";
-      return false;
-    }
-
-    FcDefaultSubstitute(pattern);
-    res = FcResultMatch;   // grrr, stupid convention...
-    font = FcFontMatch(NULL, pattern, &res);
-
-    if(res != FcResultMatch) {
-      std::cerr << "Couldn't match font; face = '" << fonts[i].name << "'.  Val: " << res << "\n";
-      return false;
-    }
-
-    FcPatternDestroy(pattern);
-
-    res = FcPatternGetFTFace(font, FC_FT_FACE, 0, &face);
-
-    if(res == FcResultNoMatch) {
-      // sigh; apparently it often (always?) fails to load the FT_Face?  do it manually.
-      FcChar8 *filename;
-      int     face_index;
-
-      res = FcPatternGetString(font, FC_FILE, 0, &filename);
-
-      if(res != FcResultMatch) {
-        std::cerr << "Couldn't get font filename; face = '" << fonts[i].name << "'. Val: " << res;
-        return false;
-      }
-
-      res = FcPatternGetInteger(font, FC_INDEX, 0, &face_index);
-
-      if(res != FcResultMatch) {
-        std::cerr << "Couldn't get font index; face = '" << fonts[i].name << "'. Val: " << res;
-        return false;
-      }
-
-      // grrr, "char" vs. "unsigned char"
-      err = FT_New_Face(lib, reinterpret_cast<char*>(filename), face_index, &face);
-
-      if(err) {
-        std::cerr << "Couldn't load font " << filename << "; err = " << err << "\n";
-        return false;
-      }
-
-      del_face = true;
-    }
-    else if(res != FcResultMatch) {
-      std::cerr << "Couldn't get FT_Face; face = '" << fonts[i].name << "'.  Error: ";
-
-      if(res == FcResultTypeMismatch)
-        std::cerr << "type mismatch\n";
-      else if(res == FcResultNoId)
-        std::cerr << "no ID\n";
-
-      return false;
-    }
-    else {
-      del_face = false;
-    }
-
-    FcPatternDestroy(font);
+    del_face = true;
 
     err = FT_Set_Char_Size(face,
         FONT_SIZE*64, 0,  // width, height (in points)
