@@ -111,6 +111,7 @@ CBuilding::~CBuilding ()
 
 void CBuilding::RenderLOD ()
 {
+  glColor3fv (&_color.red);
   _mesh_lod->Render ();
 }
 
@@ -872,12 +873,33 @@ void CBuilding::CreateTower ()
 void CBuilding::CreateLOD ()
 {
   GLvertex    p;
-  float       x1 = (float)_x;
-  float       x2 = (float)(_x + _width);
+  float min_x = 999999.0f, max_x = -999999.0f;
+  float min_z = 999999.0f, max_z = -999999.0f;
+  float max_y = 0.0f;
+  
+  if (_mesh->_vertex.empty()) {
+      min_x = (float)_x;
+      max_x = (float)(_x + _width);
+      min_z = (float)_y;
+      max_z = (float)(_y + _depth);
+      max_y = (float)_height;
+  } else {
+      for (size_t i = 0; i < _mesh->_vertex.size(); i++) {
+          GLvector& v = _mesh->_vertex[i].position;
+          if (v.y > max_y) max_y = v.y;
+          if (v.x < min_x) min_x = v.x;
+          if (v.x > max_x) max_x = v.x;
+          if (v.z < min_z) min_z = v.z;
+          if (v.z > max_z) max_z = v.z;
+      }
+  }
+
+  float       x1 = min_x;
+  float       x2 = max_x;
   float       y1 = 0.0f;
-  float       y2 = (float)_height;
-  float       z2 = (float)_y;
-  float       z1 = (float)(_y + _depth);
+  float       y2 = max_y;
+  float       z2 = min_z;
+  float       z1 = max_z;
 
   quad_strip  qs;
   for(int i=0; i<10; i++) qs.index_list.push_back(i);

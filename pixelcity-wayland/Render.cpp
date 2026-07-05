@@ -620,6 +620,8 @@ void RenderTerm (void)
     return;
   wglDeleteContext (hRC);
   hRC = NULL;
+#elif defined(WAYLAND)
+  // Wayland context handled externally
 #else
   Display *dpy = WinGetDisplay();
 

@@ -17,7 +17,7 @@ public:
                           CEntity (void);
   virtual                 ~CEntity () {};
   virtual void            Render (void);
-  virtual void            RenderLOD (void) {}
+  virtual void            RenderLOD (void) { Render(); }
   virtual void            RenderFlat (bool wirefame);
   virtual unsigned        Texture () { return 0; }
   virtual void            Update (void);
