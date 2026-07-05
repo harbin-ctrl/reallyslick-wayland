@@ -27,18 +27,18 @@
 #include "Random.h"
 
 static int              k = 1;
-static unsigned long    mag01[2] = {0x0, MATRIX_A};
-static unsigned long    ptgfsr[N];
+static uint32_t    mag01[2] = {0x0, MATRIX_A};
+static uint32_t    ptgfsr[N];
 
 /*-----------------------------------------------------------------------------
 
 -----------------------------------------------------------------------------*/
 
-unsigned long RandomVal (void)
+uint32_t RandomVal (void)
 {
 
   int		            kk;
-  unsigned long	    y;
+  uint32_t	    y;
   
   if (k == N) {
     for (kk = 0; kk < N - M; kk++) {
@@ -65,7 +65,7 @@ unsigned long RandomVal (void)
 
 -----------------------------------------------------------------------------*/
 
-unsigned long RandomVal (int range)
+uint32_t RandomVal (int range)
 {
 
   return range ? (RandomVal () % range) : 0;
@@ -76,7 +76,7 @@ unsigned long RandomVal (int range)
 
 -----------------------------------------------------------------------------*/
 
-void RandomInit (unsigned long seed)
+void RandomInit (uint32_t seed)
 {
 
   //int	    k;
