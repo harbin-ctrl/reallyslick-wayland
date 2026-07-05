@@ -20,7 +20,11 @@
 #define COLOR_CYCLE         (COLOR_CYCLE_TIME / 4)
 #define FONT_COUNT          (sizeof (fonts) / sizeof (struct glFont))
 #define FONT_SIZE           (LOGO_PIXELS - LOGO_PIXELS / 8)
-#define BLOOM_SCALING       0.07f
+// The bloom source is now the composited frame we already drew (captured in
+// RenderUpdate). do_effects() squares it via texture combiners so only bright
+// pixels bloom; BLOOM_SCALING is the per-pass additive weight over the ~37
+// blur quads, tuned for that squared source.
+#define BLOOM_SCALING       0.09f
 
 #ifdef WINDOWS
 #include <windows.h>
@@ -243,7 +247,10 @@ static void do_effects (int type)
   
   fade = WorldFade ();
   bloom_radius = 15;
-  bloom_step = bloom_radius / 3;
+  // Wider step -> fewer full-screen bloom quads. Each quad now samples the
+  // bloom texture twice (combiner squaring), so trimming the pass count is the
+  // main fill-rate lever on the Pi's V3D GPU.
+  bloom_step = bloom_radius / 2;
   if (!TextureReady ())
     return;
   //Now change projection modes so we can render full-screen effects
@@ -321,7 +328,30 @@ static void do_effects (int type)
     glEnd ();
     break;
   case EFFECT_BLOOM:
-    //Simple bloom effect
+    //Simple bloom effect. The source is the full composited frame, so square it
+    //with the texture combiners (unit0: TEXTURE*TEXTURE = source^2; unit1:
+    //*PRIMARY_COLOR = bloom tint * BLOOM_SCALING). Squaring crushes the dark
+    //sky/walls toward black while keeping bright windows/lights, so the additive
+    //accumulation below only spreads the bright pixels -- no full-frame haze.
+    glActiveTexture (GL_TEXTURE0);
+    glEnable (GL_TEXTURE_2D);
+    glBindTexture (GL_TEXTURE_2D, TextureId (TEXTURE_BLOOM));
+    glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+    glTexEnvi (GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+    glTexEnvi (GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_TEXTURE);
+    glTexEnvi (GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+    glTexEnvi (GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_TEXTURE);
+    glTexEnvi (GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+    glActiveTexture (GL_TEXTURE1);
+    glEnable (GL_TEXTURE_2D);
+    glBindTexture (GL_TEXTURE_2D, TextureId (TEXTURE_BLOOM));
+    glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+    glTexEnvi (GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+    glTexEnvi (GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
+    glTexEnvi (GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+    glTexEnvi (GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_PRIMARY_COLOR);
+    glTexEnvi (GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+    glActiveTexture (GL_TEXTURE0);
     glBegin (GL_QUADS);
     color = WorldBloomColor () * BLOOM_SCALING;
     glColor3fv (&color.red);
@@ -336,6 +366,12 @@ static void do_effects (int type)
       }
     }
     glEnd ();
+    // Restore default single-texture modulation.
+    glActiveTexture (GL_TEXTURE1);
+    glDisable (GL_TEXTURE_2D);
+    glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glActiveTexture (GL_TEXTURE0);
+    glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     break;
   case EFFECT_DEBUG_OVERBLOOM:
     //This will punish that uppity GPU. Good for testing low frame rate behavior.
@@ -757,6 +793,11 @@ void RenderInit (void)
 	  SelectObject(hDC, oldfont);
 	  DeleteObject(font);		
   }
+#elif defined(WAYLAND_SDL2)
+  if(!RenderLoadFonts(NULL, NULL)) {
+    std::cerr << "Couldn't load fonts...\n";
+    return;
+  }
 #else
   Display      *dpy = WinGetDisplay();
   XVisualInfo  *vis = WinGetVisual();
@@ -800,6 +841,8 @@ void RenderInit (void)
 
 #ifdef WINDOWS
   SwapBuffers (hDC);
+#elif defined(WAYLAND_SDL2)
+  // Swapped externally
 #else
   glFlush();
   glXSwapBuffers(dpy, WinGetWindow());
@@ -997,6 +1040,8 @@ void RenderUpdate (void)
     do_effects (EFFECT_NONE);
 #ifdef WINDOWS
     SwapBuffers (hDC);
+#elif defined(WAYLAND_SDL2)
+  // Swapped externally
 #else
     glXSwapBuffers(WinGetDisplay(), WinGetWindow());
 #endif
@@ -1067,6 +1112,23 @@ void RenderUpdate (void)
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     EntityRender ();
   }
+  // Bloom source: reuse the frame we just rendered instead of drawing the whole
+  // city a second time. Copy the composited scene (after geometry, before the
+  // FPS/help overlays) straight into the bloom texture; do_effects() blurs it
+  // and adds it back. This replaces the separate full-scene pass in do_bloom().
+  if (RenderBloom () && TextureReady ()) {
+    // Reuse the frame we already drew as the bloom source instead of rendering
+    // the whole city a second time. The source is thresholded in do_effects()
+    // by squaring it (texture combiners), so only bright pixels bloom.
+    glBindTexture (GL_TEXTURE_2D, TextureId (TEXTURE_BLOOM));
+    // We only define level 0 here (at the window's NPOT size), so force a
+    // non-mipmapped filter -- otherwise the texture is mipmap-incomplete and
+    // samples as white, washing the whole frame.
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glCopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA,
+                      0, letterbox_offset, render_width, render_height, 0);
+  }
   do_effects (effect);
   //Framerate tracker
   if (show_fps) 
@@ -1077,6 +1139,8 @@ void RenderUpdate (void)
 
 #ifdef WINDOWS
   SwapBuffers (hDC);
+#elif defined(WAYLAND_SDL2)
+  // Swapped externally
 #else
   glXSwapBuffers(WinGetDisplay(), WinGetWindow());
 #endif

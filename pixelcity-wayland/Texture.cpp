@@ -347,39 +347,6 @@ static void window (int x, int y, int size, int id, GLrgba color)
                           
 -----------------------------------------------------------------------------*/
 
-static void do_bloom (CTexture* t)
-{
-
-  glBindTexture(GL_TEXTURE_2D, 0);		
-  glViewport(0, 0, t->_size , t->_size);
-  glCullFace (GL_BACK);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glDepthMask (true);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-  glEnable(GL_DEPTH_TEST);
-  glEnable (GL_CULL_FACE);
-  glCullFace (GL_BACK);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glEnable (GL_FOG);
-  glFogf (GL_FOG_START, RenderFogDistance () / 2);
-  glFogf (GL_FOG_END, RenderFogDistance ());
-  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-  glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
-  glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  glEnable (GL_TEXTURE_2D);
-  EntityRender ();
-  CarRender ();
-  LightRender ();
-  glBindTexture(GL_TEXTURE_2D, t->_glid);		
-  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glCopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, t->_size, t->_size, 0);
-
-}
-
-/*-----------------------------------------------------------------------------
-                          
------------------------------------------------------------------------------*/
-
 CTexture::CTexture (int id, int size, bool mipmap, bool clamp, bool masked)
 {
 
@@ -821,24 +788,16 @@ bool TextureReady ()
 void TextureUpdate (void)
 {
 
-  if (textures_done) {
-    if (!RenderBloom ())
-      return;
-    CTexture*   t;
-
-    for (t = head; t; t = t->_next) {
-      if (t->_my_id != TEXTURE_BLOOM)
-        continue;
-      do_bloom (t);
-      return;
-    }
-  }
+  // The bloom texture is now captured from the main frame in RenderUpdate(),
+  // so TextureUpdate() only has to build the static textures once at startup.
+  if (textures_done)
+    return;
   for (CTexture* t = head; t; t = t->_next) {
     if (!t->_ready) {
       t->Rebuild();
       return;
     }
-  } 
+  }
   textures_done = true;
 
 }
