@@ -369,14 +369,14 @@ void EntityRender ()
       return 0;
   });
 
-  float lod_dist_sq = 100.0f * 100.0f; // Use LOD beyond 100 units
-
+  // Always draw the full mesh. The LOD proxy box covers the same screen pixels
+  // as the real building, so it saves no fill-rate (the actual bottleneck) --
+  // benchmarks showed it was marginally *slower*. Its only visible effect was a
+  // window-pattern "pop" as buildings crossed the threshold, because a box proxy
+  // cannot reproduce the perimeter/tiered window UVs of tower & modern shapes.
+  // The LOD mesh is still built (see CBuilding::CreateLOD) but is no longer used.
   for (int i = 0; i < visible_count; i++) {
-      if (sorted_cells[i].dist_sq > lod_dist_sq) {
-          glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured_lod);
-      } else {
-          glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured);
-      }
+      glCallList(cell_list[sorted_cells[i].x][sorted_cells[i].y].list_textured);
   }
 
   //draw all flat colored objects
