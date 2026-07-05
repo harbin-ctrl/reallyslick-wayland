@@ -36,6 +36,8 @@
 #include "Win.h"
 #include "time_util.h"
 
+extern bool generate_icon;
+
 
 enum
 {
@@ -380,6 +382,11 @@ void CameraInit (void)
 
 void CameraUpdate (void)		
 {
+  if (generate_icon) {
+    position = glVector (235.0f, 45.0f, 275.0f);
+    angle = glVector (12.0f, 150.0f, 0.0f);
+    return;
+  }
 
   CameraPan (movement.x);
   CameraForward (movement.z);

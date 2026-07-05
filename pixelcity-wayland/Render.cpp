@@ -58,6 +58,8 @@
 #include "Macro.h"
 #include "Math.h"
 #include "Render.h"
+
+extern bool generate_icon;
 #include "Sky.h"
 #include "Texture.h"
 #include "gl_ext.h"
@@ -1134,11 +1136,41 @@ void RenderUpdate (void)
       glMatrixMode (GL_MODELVIEW);
       glPopMatrix();
   }
+
+  if (generate_icon) {
+    glMatrixMode (GL_PROJECTION);
+    glPushMatrix ();
+    glLoadIdentity ();
+    glOrtho (0, render_width, render_height, 0, 0.1f, 2048);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask (false);
+    glMatrixMode (GL_MODELVIEW);
+    glPushMatrix ();
+    glLoadIdentity();
+    glTranslatef(0, 0, -1.0f);				
+    glDisable (GL_BLEND);
+    glDisable (GL_FOG);
+    glDisable (GL_TEXTURE_2D);
+
+    int text_width = 126;
+    int text_x = (render_width - text_width) / 2;
+    int text_y = render_height - 60;
+
+    RenderPrint (text_x + 2, text_y - 2, 6, glRgba (0.0f, 0.0f, 0.0f, 0.8f), "PixelCity");
+    RenderPrint (text_x + 2, text_y + 2, 6, glRgba (0.0f, 0.0f, 0.0f, 0.8f), "PixelCity");
+    RenderPrint (text_x, text_y, 6, glRgba (0.0f, 0.9f, 1.0f, 1.0f), "PixelCity");
+
+    glPopMatrix ();
+    glMatrixMode (GL_PROJECTION);
+    glPopMatrix ();
+    glMatrixMode (GL_MODELVIEW);
+  }
+
   //Framerate tracker
-  if (show_fps) 
+  if (show_fps && !generate_icon) 
     RenderPrint (1, "FPS=%d : Scale=%d%% : Entities=%d : polys=%d", current_fps, (int)(render_scale * 100.0f + 0.5f), EntityCount () + LightCount () + CarCount (), EntityPolyCount () + LightCount () + CarCount ());
   //Show the help overlay
-  if (show_help)
+  if (show_help && !generate_icon)
     do_help ();
 
 #ifdef WINDOWS

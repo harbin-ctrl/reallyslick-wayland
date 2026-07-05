@@ -91,6 +91,7 @@ static void AppTerm ()
 }
 
 /*--- window / input state --------------------------------------------------*/
+bool                    generate_icon = false;
 static int              window_width  = 800;
 static int              window_height = 600;
 static bool             quit          = false;
@@ -325,12 +326,60 @@ static void pump_events ()
   wl_display_dispatch_pending (display);
 }
 
+static void save_screenshot (const char *filename)
+{
+  int w = window_width;
+  int h = window_height;
+  unsigned char *pixels = (unsigned char *) malloc (w * h * 3);
+  if (!pixels) return;
+  glReadPixels (0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+
+  FILE *f = fopen (filename, "wb");
+  if (f) {
+    unsigned char header[18] = {0};
+    header[2] = 2; // uncompressed RGB
+    header[12] = w & 0xFF;
+    header[13] = (w >> 8) & 0xFF;
+    header[14] = h & 0xFF;
+    header[15] = (h >> 8) & 0xFF;
+    header[16] = 24; // 24-bit
+    fwrite (header, 1, 18, f);
+    // convert RGB to BGR
+    unsigned char *bgr = (unsigned char *) malloc (w * h * 3);
+    if (bgr) {
+      for (int i = 0; i < w * h; ++i) {
+        bgr[i*3+0] = pixels[i*3+2];
+        bgr[i*3+1] = pixels[i*3+1];
+        bgr[i*3+2] = pixels[i*3+0];
+      }
+      fwrite (bgr, 1, w * h * 3, f);
+      free (bgr);
+    }
+    fclose (f);
+  }
+  free (pixels);
+
+  // Try to convert to PNG if convert or ffmpeg is available
+  if (system ("which convert > /dev/null 2>&1") == 0) {
+    char cmd[512];
+    snprintf (cmd, sizeof(cmd), "convert %s icon.png && rm %s", filename, filename);
+    int res = system (cmd);
+    (void)res;
+  } else if (system ("which ffmpeg > /dev/null 2>&1") == 0) {
+    char cmd[512];
+    snprintf (cmd, sizeof(cmd), "ffmpeg -y -i %s icon.png && rm %s", filename, filename);
+    int res = system (cmd);
+    (void)res;
+  }
+}
+
 int main (int argc, char** argv)
 {
   bool do_benchmark = false;
   for (int i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "--fullscreen")) is_fullscreen = true;
     if (!strcmp (argv[i], "--benchmark"))  do_benchmark = true;
+    if (!strcmp (argv[i], "--generate-icon")) generate_icon = true;
   }
 
   display = wl_display_connect (NULL);
@@ -387,6 +436,15 @@ int main (int argc, char** argv)
     }
     AppUpdate ();
     eglSwapBuffers (egl_display, egl_surface);
+
+    if (generate_icon && EntityReady ()) {
+      static int icon_frames = 0;
+      icon_frames++;
+      if (icon_frames > 5) { // wait a few frames for everything to settle
+        save_screenshot ("icon.tga");
+        quit = true;
+      }
+    }
 
     if (do_benchmark && EntityReady ()) {
       if (frames == 0) clock_gettime (CLOCK_MONOTONIC, &t0);
