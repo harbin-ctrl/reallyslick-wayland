@@ -1,9 +1,15 @@
-TARGET  := solarwinds
-SRCS    := main.cpp solarwinds.cpp
-OBJS    := $(patsubst %.cpp,%.o,$(SRCS))
+XDG_SHELL_XML := /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
+XDG_DECO_XML  := /usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 
-CXXFLAGS := -O3 -Wall $(shell pkg-config --cflags sdl2 gl)
-LIBS     := $(shell pkg-config --libs sdl2 gl) -lGLU -lm
+CXX      := g++
+CC       := gcc
+CXXFLAGS := -O3 -Wall $(shell pkg-config --cflags wayland-client wayland-egl egl gl)
+CFLAGS   := -O3 $(shell pkg-config --cflags wayland-client)
+LIBS     := $(shell pkg-config --libs wayland-client wayland-egl egl gl) -lGLU -lm
+
+TARGET  := solarwinds
+HEADERS := xdg-shell-client-protocol.h xdg-decoration-client-protocol.h
+OBJS    := main.o solarwinds.o xdg-shell-protocol.o xdg-decoration-protocol.o
 
 PREFIX  ?= /usr/local
 BINDIR  := $(PREFIX)/bin
@@ -14,11 +20,29 @@ ICONDIR := $(PREFIX)/share/icons/hicolor
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CXX) -o $@ $(OBJS) $(LIBS)
+xdg-shell-protocol.o: xdg-shell-protocol.c xdg-shell-client-protocol.h
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-%.o: %.cpp
+xdg-decoration-protocol.o: xdg-decoration-protocol.c xdg-decoration-client-protocol.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(TARGET): $(OBJS) $(HEADERS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LIBS)
+
+%.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+xdg-shell-client-protocol.h: $(XDG_SHELL_XML)
+	wayland-scanner client-header < $< > $@
+
+xdg-shell-protocol.c: $(XDG_SHELL_XML)
+	wayland-scanner private-code < $< > $@
+
+xdg-decoration-client-protocol.h: $(XDG_DECO_XML)
+	wayland-scanner client-header < $< > $@
+
+xdg-decoration-protocol.c: $(XDG_DECO_XML)
+	wayland-scanner private-code < $< > $@
 
 install: $(TARGET)
 	install -Dm755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
@@ -57,4 +81,4 @@ uninstall-user:
 	done
 
 clean:
-	rm -f $(TARGET) *.o
+	rm -f $(TARGET) *.o xdg-shell-protocol.c xdg-shell-client-protocol.h xdg-decoration-protocol.c xdg-decoration-client-protocol.h
