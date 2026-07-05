@@ -44,13 +44,7 @@
 #include <X11/Xlib.h>
 #include <GL/glx.h>
 
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include <fontconfig/fontconfig.h>
-#include <fontconfig/fcfreetype.h>
-
 #include <errno.h>
-#include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 #endif
@@ -69,6 +63,7 @@
 #include "gl_ext.h"
 #include "Shader.h"
 #include "shaders.h"
+#include "font_data.h"
 
 GLuint main_fbo = 0;
 GLuint main_fbo_tex = 0;
@@ -477,8 +472,8 @@ void RenderPrint (int x, int y, int font, GLrgba color, const char *fmt, ...)
   va_start(ap, fmt);		
   vsprintf(text, fmt, ap);				
   va_end(ap);		
-  glPushAttrib(GL_LIST_BIT);				
-  glListBase(fonts[font % FONT_COUNT].base_char - 32);				
+  glPushAttrib(GL_LIST_BIT);
+  glListBase(fonts[font % FONT_COUNT].base_char - font_first_char);
   glColor3fv (&color.red);
 	glRasterPos2i (x, y);
   glCallLists(strlen(text), GL_UNSIGNED_BYTE, text);
@@ -674,124 +669,36 @@ void RenderTerm (void)
 
 #ifndef WINDOWS
 
-// Open one of the bundled fonts by basename. Looks next to the executable
-// first (fonts/<name>), then in the CWD, then falls back to a system DejaVu
-// bold so the toy still renders text if the fonts/ dir is missing.
-static FT_Face RenderOpenBundledFace (FT_Library lib, const char *basename)
-{
-  FT_Face  face = NULL;
-  char     path[1024];
-  char     exe[1024];
-  ssize_t  n;
-
-  n = readlink ("/proc/self/exe", exe, sizeof (exe) - 1);
-  if (n > 0) {
-    exe[n] = '\0';
-    char *slash = strrchr (exe, '/');
-    if (slash) {
-      *slash = '\0';
-      snprintf (path, sizeof (path), "%s/fonts/%s", exe, basename);
-      if (!FT_New_Face (lib, path, 0, &face))
-        return face;
-    }
-  }
-
-  snprintf (path, sizeof (path), "fonts/%s", basename);
-  if (!FT_New_Face (lib, path, 0, &face))
-    return face;
-
-  if (!FT_New_Face (lib, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    0, &face)) {
-    std::cerr << "Bundled font '" << basename << "' not found; using DejaVu.\n";
-    return face;
-  }
-
-  return NULL;
-}
-
+// Build the bitmap-font display lists from the glyphs baked into font_data.c
+// (see fontgen.c). No FreeType / fontconfig / .ttf files are touched at runtime;
+// the display lists are identical to what the old FreeType path produced. dpy /
+// vis are unused (kept for the shared X11/Wayland call signature).
 static bool RenderLoadFonts(Display *dpy, Visual *vis)
 {
-  FT_Error     err;
-  FT_Library   lib;
-  FT_Face      face;
-  bool         del_face;
-  GLubyte      *bits;
-  GLint        alignment;
-  char         str[96];
+  GLint  alignment;
 
-  if((err = FT_Init_FreeType(&lib))) {
-    std::cerr << "FT_Init_Freetype() failed: " << err << ".\n";
-    return false;
-  }
+  (void)dpy; (void)vis;
+
+  if ((int)FONT_COUNT != font_count)
+    std::cerr << "Warning: FONT_COUNT (" << FONT_COUNT << ") != baked font_count ("
+              << font_count << "); regenerate font_data.c (make regen-fonts).\n";
 
   glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-  for(int j = 0; j < 96; j++)
-    str[j] = j+32;
-
-  for(unsigned int i = 0; i < FONT_COUNT; i++) {
-    face = RenderOpenBundledFace(lib, fonts[i].name);
-
-    if(!face) {
-      std::cerr << "Couldn't load any font for '" << fonts[i].name << "'.\n";
-      return false;
-    }
-
-    del_face = true;
-
-    err = FT_Set_Char_Size(face,
-        FONT_SIZE*64, 0,  // width, height (in points)
-        72, 72);          // x, y dpi
-
-    if(err) {
-      std::cerr << "Can't set char size; face = '" << fonts[i].name << "'.  err: " << err << "\n";
-      return false;
-    }
-
-    fonts[i].base_char = glGenLists(96);
-
-    for(unsigned char j = 0; j < 96; j++) {
-      FT_Load_Char(face, str[j], FT_LOAD_RENDER);
-
-      FT_Glyph_Metrics& m = face->glyph->metrics;
-      FT_Bitmap& bm = face->glyph->bitmap;
-      FT_Vector& ad = face->glyph->advance;
-
-      int met_height = m.height >> 6;
-      int met_width = m.width >> 6;
-
-      bits = new GLubyte[met_height * ((met_width + 7) / 8)]();
-
-      for(int y = 0; y < met_height; y++) {
-        // freetype and gl have opposite bitmap row orders
-        int yOff = (met_height - y - 1) * ((met_width + 7) / 8);
-
-        for(int x = 0; x < met_width; x++) {
-          if(bm.buffer[y * bm.width + x] > 127) {
-            bits[yOff + (x / 8)] |= (1 << (7 - (x % 8)));
-          }
-        }
-      }
-
+  for (unsigned int i = 0; i < FONT_COUNT; i++) {
+    // glListBase in RenderPrint indexes lists by (char - font_first_char), so the
+    // block must be contiguous and cover the same range fontgen baked (32..126).
+    fonts[i].base_char = glGenLists(font_glyph_count);
+    for (int j = 0; j < font_glyph_count; j++) {
+      const Glyph& g = font_glyphs[i][j];
       glNewList(fonts[i].base_char + j, GL_COMPILE);
-      glBitmap(met_width, met_height,
-          -(m.horiBearingX / 64.0), (m.height - m.horiBearingY) / 64.0,
-          ad.x / 64.0, ad.y / 64.0,
-          bits);
+      glBitmap(g.width, g.height, g.xorig, g.yorig, g.xmove, g.ymove, g.bits);
       glEndList();
-
-      delete[] bits;
     }
-
-    if(del_face)
-      FT_Done_Face(face);
   }
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
-
-  FT_Done_FreeType(lib);
-
   return true;
 }
 #endif /* !WINDOWS */

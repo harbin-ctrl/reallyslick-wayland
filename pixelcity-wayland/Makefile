@@ -22,14 +22,15 @@ xdg-decoration-unstable-v1-protocol.c:
 	wayland-scanner private-code $(XDG_DECO_XML) $@
 
 # Everything but the two retired front-ends, plus the generated protocol code.
+# fontgen.c is a standalone build tool (its own main), never part of pixelcity.
 SRCS := $(filter-out Win.cpp sdl_main.cpp,$(wildcard *.cpp)) \
-        $(filter-out $(GEN_PROTO_C),$(wildcard *.c)) \
+        $(filter-out $(GEN_PROTO_C) fontgen.c,$(wildcard *.c)) \
         $(GEN_PROTO_C)
 
 DEPS_TMP := $(SRCS:.cpp=.d)
 DEPS := $(DEPS_TMP:.c=.d)
 
-OBJS := Building.o Camera.o Car.o Deco.o Entity.o glBbox.o glMatrix.o glQuat.o glRgba.o glVector2.o glVector3.o Ini.o Light.o Math.o Mesh.o Random.o Render.o Sky.o Texture.o Visible.o wl_main.o World.o time_util.o xdg-shell-protocol.o xdg-decoration-unstable-v1-protocol.o gl_ext.o Shader.o
+OBJS := Building.o Camera.o Car.o Deco.o Entity.o glBbox.o glMatrix.o glQuat.o glRgba.o glVector2.o glVector3.o Ini.o Light.o Math.o Mesh.o Random.o Render.o Sky.o Texture.o Visible.o wl_main.o World.o time_util.o xdg-shell-protocol.o xdg-decoration-unstable-v1-protocol.o gl_ext.o Shader.o font_data.o
 
 # wl_main includes the generated headers, so make sure they exist first.
 wl_main.o wl_main.d: xdg-shell-client-protocol.h xdg-decoration-unstable-v1-client-protocol.h
@@ -52,8 +53,10 @@ WL_LIBS   := $(shell pkg-config --libs wayland-client wayland-egl egl xkbcommon)
 
 CFLAGS=-Wall -D_FILE_OFFSET_BITS=64 -DWAYLAND
 CXXFLAGS=-Wall -D_FILE_OFFSET_BITS=64 -DWAYLAND
-CPPFLAGS=$(shell pkg-config --cflags fontconfig freetype2) $(WL_CFLAGS)
-LDFLAGS=$(shell pkg-config --libs fontconfig freetype2) $(WL_LIBS)
+# The runtime no longer uses FreeType/fontconfig -- the glyphs are baked into
+# font_data.c by fontgen (see the regen-fonts target). Only fontgen links them.
+CPPFLAGS=$(WL_CFLAGS)
+LDFLAGS=$(WL_LIBS)
 
 ifeq ($(OPT), 0)
 CFLAGS += -g -O0
@@ -63,8 +66,18 @@ CFLAGS += -O3
 CXXFLAGS += -O3
 endif
 
+# Build-time font tool: bakes fonts/*.ttf into font_data.c (which is checked in
+# and compiled straight into pixelcity). Only needed when the font list or
+# FONT_SIZE changes -- a normal build never touches freetype or the .ttf files.
+fontgen: fontgen.c font_data.h Texture.h
+	g++ -Wall -o $@ fontgen.c $(shell pkg-config --cflags --libs freetype2)
+
+.PHONY: regen-fonts
+regen-fonts: fontgen
+	./fontgen
+
 clean:
-	rm -f *.o pixelcity
+	rm -f *.o pixelcity fontgen
 
 realclean: clean
 	rm -f *.d xdg-shell-client-protocol.h xdg-shell-protocol.c \
