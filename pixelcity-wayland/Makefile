@@ -82,3 +82,20 @@ clean:
 realclean: clean
 	rm -f *.d xdg-shell-client-protocol.h xdg-shell-protocol.c \
 	      xdg-decoration-unstable-v1-client-protocol.h xdg-decoration-unstable-v1-protocol.c
+
+PREFIX ?= /usr/local
+DESTDIR ?=
+
+install: pixelcity
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 755 pixelcity $(DESTDIR)$(PREFIX)/bin
+	install -d $(DESTDIR)$(PREFIX)/share/pixmaps
+	install -m 644 pixelcity.png $(DESTDIR)$(PREFIX)/share/pixmaps
+	install -d $(DESTDIR)$(PREFIX)/share/applications
+	install -m 644 pixelcity.desktop $(DESTDIR)$(PREFIX)/share/applications
+
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/pixelcity
+	rm -f $(DESTDIR)$(PREFIX)/share/pixmaps/pixelcity.png
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/pixelcity.desktop
+
