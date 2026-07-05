@@ -252,6 +252,70 @@ static void do_progress (float center_x, float center_y, float radius, float opa
 
 /*-----------------------------------------------------------------------------
 
+  Self-contained loading screen drawn directly to the default framebuffer.
+  This does NOT call do_effects() or touch any FBO / bloom / texture-combiner
+  state -- those subsystems aren't ready yet during texture compilation.
+
+-----------------------------------------------------------------------------*/
+
+static void do_loading_screen ()
+{
+
+  float progress;
+  int   radius;
+
+  // Compute combined progress: textures = 0..50%, entities = 50..100%.
+  if (!TextureReady ())
+    progress = TextureProgress () * 0.5f;
+  else
+    progress = 0.5f + EntityProgress () * 0.5f;
+
+  // Make sure we're on the default framebuffer, not an FBO.
+  if (glBindFramebufferEXT)
+    glBindFramebufferEXT (GL_FRAMEBUFFER, 0);
+
+  glViewport (0, 0, render_width, render_height);
+  glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
+  glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  // Set up a clean 2D ortho projection -- completely independent of the
+  // scene projection that RenderUpdate would normally configure.
+  glMatrixMode (GL_PROJECTION);
+  glPushMatrix ();
+  glLoadIdentity ();
+  glOrtho (0, render_width, render_height, 0, 0.1f, 2048);
+  glMatrixMode (GL_MODELVIEW);
+  glPushMatrix ();
+  glLoadIdentity ();
+  glTranslatef (0, 0, -1.0f);
+
+  glDisable (GL_DEPTH_TEST);
+  glDepthMask (false);
+  glDisable (GL_TEXTURE_2D);
+  glDisable (GL_FOG);
+  glDisable (GL_CULL_FACE);
+  glDisable (GL_BLEND);
+
+  // Draw the progress widget and text.
+  radius = render_width / 16;
+  do_progress ((float)render_width / 2, (float)render_height / 2,
+               (float)radius, 1.0f, progress);
+  RenderPrint (render_width / 2 - LOGO_PIXELS, render_height / 2 + LOGO_PIXELS,
+               0, glRgba (0.5f), "%1.2f%%", progress * 100.0f);
+  RenderPrint (1, "%s v%d.%d.%03d", APP_TITLE, VERSION_MAJOR, VERSION_MINOR,
+               VERSION_REVISION);
+
+  // Restore matrix stacks exactly as we found them.
+  glPopMatrix ();
+  glMatrixMode (GL_PROJECTION);
+  glPopMatrix ();
+  glMatrixMode (GL_MODELVIEW);
+  glDepthMask (true);
+
+}
+
+/*-----------------------------------------------------------------------------
+
 -----------------------------------------------------------------------------*/
 
 static void do_effects (int type)
@@ -999,6 +1063,20 @@ void RenderUpdate (void)
 
   frames++;
   do_fps ();
+
+  // During loading, draw the progress screen directly to the default
+  // framebuffer and return immediately — don't touch FBO or scene state.
+  if (LOADING_SCREEN && !EntityReady ()) {
+    do_loading_screen ();
+#ifdef WINDOWS
+    SwapBuffers (hDC);
+#elif defined(WAYLAND)
+  // Swapped externally
+#else
+    glXSwapBuffers(WinGetDisplay(), WinGetWindow());
+#endif
+    return;
+  }
   
   if (glBindFramebufferEXT && main_fbo) {
       glBindFramebufferEXT(GL_FRAMEBUFFER, main_fbo);
@@ -1012,18 +1090,6 @@ void RenderUpdate (void)
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   if (letterbox)
     glViewport (0, (int)(letterbox_offset * render_scale), fbo_width, fbo_height);
-  if (LOADING_SCREEN && TextureReady () && !EntityReady ()) {
-    if (glBindFramebufferEXT && main_fbo) glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
-    do_effects (EFFECT_NONE);
-#ifdef WINDOWS
-    SwapBuffers (hDC);
-#elif defined(WAYLAND)
-  // Swapped externally
-#else
-    glXSwapBuffers(WinGetDisplay(), WinGetWindow());
-#endif
-    return;
-  }
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
   glShadeModel(GL_SMOOTH);
   glFogi (GL_FOG_MODE, GL_LINEAR);
