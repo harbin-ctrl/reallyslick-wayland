@@ -26,6 +26,7 @@
 #include <poll.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 
 /*--- core entry points (defined across the rest of the program) ------------*/
 extern void RandomInit (uint32_t seed);
@@ -102,6 +103,7 @@ static wl_surface*      surface;
 static xdg_wm_base*     wm_base;
 static xdg_surface*     xsurface;
 static xdg_toplevel*    toplevel;
+static zxdg_decoration_manager_v1* decoration_manager;
 static wl_seat*         seat;
 static wl_keyboard*     keyboard;
 static wl_pointer*      pointer;
@@ -230,9 +232,16 @@ static void pt_motion (void*, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t s
 }
 static void pt_button (void*, wl_pointer*, uint32_t, uint32_t, uint32_t, uint32_t) {}
 static void pt_axis (void*, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) {}
+// wl_pointer v5 batches events and adds axis detail. libwayland aborts if any
+// listener slot for the bound version is NULL, so stub these even though the
+// screensaver camera ignores the mouse.
+static void pt_frame (void*, wl_pointer*) {}
+static void pt_axis_source (void*, wl_pointer*, uint32_t) {}
+static void pt_axis_stop (void*, wl_pointer*, uint32_t, uint32_t) {}
+static void pt_axis_discrete (void*, wl_pointer*, uint32_t, int32_t) {}
 static const wl_pointer_listener pointer_listener = {
   pt_enter, pt_leave, pt_motion, pt_button, pt_axis,
-  NULL, NULL, NULL, NULL
+  pt_frame, pt_axis_source, pt_axis_stop, pt_axis_discrete
 };
 
 /*--- seat ------------------------------------------------------------------*/
@@ -262,6 +271,9 @@ static void reg_global (void*, wl_registry* r, uint32_t id,
   } else if (!strcmp (iface, wl_seat_interface.name)) {
     seat = (wl_seat*)wl_registry_bind (r, id, &wl_seat_interface, ver < 5 ? ver : 5);
     wl_seat_add_listener (seat, &seat_listener, NULL);
+  } else if (!strcmp (iface, zxdg_decoration_manager_v1_interface.name)) {
+    decoration_manager = (zxdg_decoration_manager_v1*)
+        wl_registry_bind (r, id, &zxdg_decoration_manager_v1_interface, 1);
   }
 }
 static void reg_remove (void*, wl_registry*, uint32_t) {}
@@ -340,6 +352,15 @@ int main (int argc, char** argv)
   xdg_toplevel_add_listener (toplevel, &toplevel_listener, NULL);
   xdg_toplevel_set_title (toplevel, "Pixel City");
   xdg_toplevel_set_app_id (toplevel, "pixelcity");
+  // Ask the compositor to draw the window decorations (title bar, borders).
+  // Without this, xdg-shell surfaces come up undecorated unless the client
+  // draws its own -- which is why the title bar vanished versus the SDL build.
+  if (decoration_manager) {
+    zxdg_toplevel_decoration_v1* deco =
+        zxdg_decoration_manager_v1_get_toplevel_decoration (decoration_manager, toplevel);
+    zxdg_toplevel_decoration_v1_set_mode (deco,
+        ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+  }
   if (is_fullscreen) xdg_toplevel_set_fullscreen (toplevel, NULL);
   wl_surface_commit (surface);
 
