@@ -23,6 +23,9 @@
 #define RESET_INTERVAL      (SCREENSAVER ? 120000 : 999999)//milliseconds
 //How long the screen fade takes when transitioning to a new city
 #define FADE_TIME           (SCREENSAVER ? 1500 : 1) //milliseconds
+//How long to hold the title card up (after everything is ready) before the
+//startup cross-fade. Keeps the title from flashing by now that load is fast.
+#define TITLE_HOLD          (SCREENSAVER ? 2000 : 0) //milliseconds
 //Debug ground texture that shows traffic lanes
 #define SHOW_DEBUG_GROUND   0
 //Controls the ammount of space available for buildings.  

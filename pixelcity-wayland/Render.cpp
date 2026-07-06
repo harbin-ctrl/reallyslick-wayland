@@ -1368,7 +1368,15 @@ void RenderUpdate (void)
       glVertex2i (render_width, render_height);
       glVertex2i (render_width, 0);
       glEnd ();
-      draw_pixel_title (f);
+      // Title alpha = min(cross-fade, fade-in ramp). During the hold (f==1) this
+      // is the fade-in ramp, so a title still fading up when the scene becomes
+      // ready keeps rising smoothly instead of popping to full; during the
+      // cross-fade (f: 1 -> 0) the ramp is already 1, so it tracks f and fades out.
+      float fin = loading_start_ms
+                ? (float)(GetTimeInMillis () - loading_start_ms) / (float)TITLE_FADE_IN_MS
+                : 1.0f;
+      if (fin > 1.0f) fin = 1.0f;
+      draw_pixel_title (f < fin ? f : fin);
       glDepthMask (true);
       glEnable (GL_DEPTH_TEST);
       glPopMatrix ();

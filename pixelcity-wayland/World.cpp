@@ -747,10 +747,20 @@ void WorldUpdate (void)
   }
   if (fade_state != FADE_IDLE) {
     if (fade_state == FADE_WAIT && TextureReady () && EntityReady ()) {
-        fade_state = FADE_IN;
-        fade_start = now;
-        fade_current = 1.0f;
-    }    
+        // Hold the finished title card for a beat before revealing the city, so
+        // it doesn't flash by now that startup is fast. Measured from the moment
+        // everything is ready -- a slow machine that takes longer than this to
+        // load just reveals as soon as it's done (no artificial wait).
+        static int  ready_since = 0;
+        if (!ready_since)
+          ready_since = now;
+        if (now - ready_since >= TITLE_HOLD) {
+          fade_state = FADE_IN;
+          fade_start = now;
+          fade_current = 1.0f;
+          ready_since = 0;
+        }
+    }
     fade_delta = now - fade_start;
     //See if we're done fading in or out
     if (fade_delta > FADE_TIME && fade_state != FADE_WAIT) {
