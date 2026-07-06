@@ -124,6 +124,8 @@ static void keyboard_key(void *data, struct wl_keyboard *wl_keyboard,
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
         if (key == KEY_F) {
             toggle_fullscreen();
+        } else if (key == KEY_Q || key == KEY_ESC) {
+            running = false;
         } else if (key == KEY_LEFT) {
             int idx = get_current_preset_index();
             idx = (idx - 1 + NUM_PRESETS) % NUM_PRESETS;
