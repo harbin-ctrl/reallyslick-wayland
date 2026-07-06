@@ -76,7 +76,8 @@ void CDeco::Render ()
   }
   _mesh->Render ();
   if (_texture == TextureId (TEXTURE_TRIM)) {
-    glDisable (GL_POLYGON_OFFSET_FILL);
+    glEnable (GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset (1.0f, 1.0f);
   }
 
 }
