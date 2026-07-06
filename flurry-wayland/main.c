@@ -72,7 +72,27 @@ bool running = true;
 char *preset_str = "random";
 char *progname = "flurry";
 
+const char *presets[] = {
+    "water",
+    "fire",
+    "psychedelic",
+    "rgb",
+    "binary",
+    "classic",
+    "insane",
+    "random"
+};
+const int NUM_PRESETS = 8;
+bool preset_changed = false;
 
+static int get_current_preset_index(void) {
+    for (int i = 0; i < NUM_PRESETS; i++) {
+        if (strcmp(preset_str, presets[i]) == 0) {
+            return i;
+        }
+    }
+    return 7; // Default to "random"
+}
 
 static void toggle_fullscreen(void) {
     if (is_fullscreen) {
@@ -98,8 +118,24 @@ static void keyboard_leave(void *data, struct wl_keyboard *wl_keyboard,
 
 static void keyboard_key(void *data, struct wl_keyboard *wl_keyboard,
                          uint32_t serial, uint32_t time, uint32_t key, uint32_t state) {
-    if (key == KEY_F && state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        toggle_fullscreen();
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        if (key == KEY_F) {
+            toggle_fullscreen();
+        } else if (key == KEY_LEFT) {
+            int idx = get_current_preset_index();
+            idx = (idx - 1 + NUM_PRESETS) % NUM_PRESETS;
+            preset_str = (char *)presets[idx];
+            printf("Switching preset to: %s\n", preset_str);
+            fflush(stdout);
+            preset_changed = true;
+        } else if (key == KEY_RIGHT) {
+            int idx = get_current_preset_index();
+            idx = (idx + 1) % NUM_PRESETS;
+            preset_str = (char *)presets[idx];
+            printf("Switching preset to: %s\n", preset_str);
+            fflush(stdout);
+            preset_changed = true;
+        }
     }
 }
 
@@ -333,6 +369,15 @@ int main(int argc, char **argv) {
             reshape_flurry(&mi, window_width, window_height);
             init_fbo(window_width, window_height);
             size_changed = false;
+        }
+
+        if (preset_changed) {
+            reshape_flurry(&mi, window_width, window_height);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            preset_changed = false;
         }
 
         // Render flurry into FBO
