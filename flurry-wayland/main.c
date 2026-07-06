@@ -321,6 +321,8 @@ int main(int argc, char **argv) {
     init_fbo(window_width, window_height);
     init_flurry(&mi);
 
+
+
     while (running) {
         wl_display_dispatch_pending(display);
 
@@ -337,50 +339,26 @@ int main(int argc, char **argv) {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         draw_flurry(&mi);
 
+
+
         // Blit FBO to screen
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer(0, 0, window_width, window_height,
+                          0, 0, window_width, window_height,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, window_width, window_height);
+        glDrawBuffer(GL_BACK);
 
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glMatrixMode(GL_PROJECTION);
-        glPushMatrix();
-        glLoadIdentity();
-        glOrtho(0, 1, 0, 1, -1, 1);
-        
-        glMatrixMode(GL_MODELVIEW);
-        glPushMatrix();
-        glLoadIdentity();
-
-        glDisableClientState(GL_VERTEX_ARRAY);
-        glDisableClientState(GL_COLOR_ARRAY);
-        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, fbo_texture);
-        glDisable(GL_BLEND);
-
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        glBegin(GL_QUADS);
-        glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 0.0f);
-        glTexCoord2f(1.0f, 0.0f); glVertex2f(1.0f, 0.0f);
-        glTexCoord2f(1.0f, 1.0f); glVertex2f(1.0f, 1.0f);
-        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 1.0f);
+        // Dummy draw to trigger EGL dirty tracking
+        glBegin(GL_POINTS);
+        glVertex2f(0.0f, 0.0f);
         glEnd();
 
-        glDisable(GL_TEXTURE_2D);
-
-        glEnableClientState(GL_VERTEX_ARRAY);
-        glEnableClientState(GL_COLOR_ARRAY);
-        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-        
-        glMatrixMode(GL_PROJECTION);
-        glPopMatrix();
-        glMatrixMode(GL_MODELVIEW);
-        glPopMatrix();
-
         eglSwapBuffers(egl_display, egl_surface);
+
+
     }
 
     free_flurry(&mi);
