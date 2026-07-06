@@ -96,10 +96,9 @@ void DrawSpark(global_info_t *global, flurry_info_t *flurry, Spark *s)
 
 void UpdateSparkColour(global_info_t *global, flurry_info_t *flurry, Spark *s)
 {
-	const float rotationsPerSecond = (float) (2.0*PI*fieldSpeed/MAXANGLES);
-	double thisPointInRadians;
-	double thisAngle = flurry->fTime*rotationsPerSecond;
-	/*float cf;*/
+	const float rotationsPerSecond = (2.0f * (float)PI * fieldSpeed / (float)MAXANGLES);
+	float thisPointInRadians;
+	float thisAngle = (float)(flurry->fTime * (double)rotationsPerSecond);
 	float cycleTime = 20.0f;
 	float colorRot;
 	float redPhaseShift;
@@ -126,11 +125,11 @@ void UpdateSparkColour(global_info_t *global, flurry_info_t *flurry, Spark *s)
 	{
 		cycleTime = 120.0f;
 	}
-	colorRot = (float) (2.0*PI/cycleTime);
-	redPhaseShift = 0.0f; /* cycleTime * 0.0f / 3.0f */
+	colorRot = (2.0f * (float)PI / cycleTime);
+	redPhaseShift = 0.0f;
 	greenPhaseShift = cycleTime / 3.0f; 
-	bluePhaseShift = cycleTime * 2.0f / 3.0f ;
-	colorTime = flurry->fTime;
+	bluePhaseShift = cycleTime * 2.0f / 3.0f;
+	colorTime = (float)flurry->fTime;
 	if (flurry->currentColorMode == whiteColorMode)
 	{
 		baseRed = 0.1875f;
@@ -157,39 +156,34 @@ void UpdateSparkColour(global_info_t *global, flurry_info_t *flurry, Spark *s)
 		}
 		else
 		{
-			colorTime = flurry->fTime + flurry->flurryRandomSeed;
+			colorTime = (float)(flurry->fTime + flurry->flurryRandomSeed);
 		}
-		baseRed = 0.109375f * ((float) cos((colorTime+redPhaseShift)*colorRot)+1.0f);
-		baseGreen = 0.109375f * ((float) cos((colorTime+greenPhaseShift)*colorRot)+1.0f);
-		baseBlue = 0.109375f * ((float) cos((colorTime+bluePhaseShift)*colorRot)+1.0f);
+		baseRed = 0.109375f * (cosf((colorTime+redPhaseShift)*colorRot)+1.0f);
+		baseGreen = 0.109375f * (cosf((colorTime+greenPhaseShift)*colorRot)+1.0f);
+		baseBlue = 0.109375f * (cosf((colorTime+bluePhaseShift)*colorRot)+1.0f);
 	}
 	
-/*
-	cf = ((float) (cos(7.0*((flurry->fTime)*rotationsPerSecond))+cos(3.0*((flurry->fTime)*rotationsPerSecond))+cos(13.0*((flurry->fTime)*rotationsPerSecond))));
-	cf /= 6.0f;
-	cf += 2.0f;
-*/
-	thisPointInRadians = 2.0 * PI * (double) s->mystery / (double) BIGMYSTERY;
+	thisPointInRadians = 2.0f * (float)PI * (float)s->mystery / (float)BIGMYSTERY;
 	
-	s->color[0] = baseRed + 0.0625f * (0.5f + (float) cos((15.0 * (thisPointInRadians + 3.0*thisAngle))) + (float) sin((7.0 * (thisPointInRadians + thisAngle))));
-	s->color[1] = baseGreen + 0.0625f * (0.5f + (float) sin(((thisPointInRadians) + thisAngle)));
-	s->color[2] = baseBlue + 0.0625f * (0.5f + (float) cos((37.0 * (thisPointInRadians + thisAngle))));
+	s->color[0] = baseRed + 0.0625f * (0.5f + cosf(15.0f * (thisPointInRadians + 3.0f * thisAngle)) + sinf(7.0f * (thisPointInRadians + thisAngle)));
+	s->color[1] = baseGreen + 0.0625f * (0.5f + sinf(thisPointInRadians + thisAngle));
+	s->color[2] = baseBlue + 0.0625f * (0.5f + cosf(37.0f * (thisPointInRadians + thisAngle)));
 }
 
 void UpdateSpark(global_info_t *global, flurry_info_t *flurry, Spark *s)
 {
-    const float rotationsPerSecond = (float) (2.0*PI*fieldSpeed/MAXANGLES);
-    double thisPointInRadians;
-    double thisAngle = flurry->fTime*rotationsPerSecond;
+    const float rotationsPerSecond = (2.0f * (float)PI * fieldSpeed / (float)MAXANGLES);
+    float thisPointInRadians;
+    float thisAngle = (float)(flurry->fTime * (double)rotationsPerSecond);
     float cf;
     int i;
-    double tmpX1,tmpY1,tmpZ1;
-    double tmpX2,tmpY2,tmpZ2;
-    double tmpX3,tmpY3,tmpZ3;
-    double tmpX4,tmpY4,tmpZ4;
-    double rotation;
-    double cr;
-    double sr;
+    float tmpX1,tmpY1,tmpZ1;
+    float tmpX2,tmpY2,tmpZ2;
+    float tmpX3,tmpY3,tmpZ3;
+    float tmpX4,tmpY4,tmpZ4;
+    float rotation;
+    float cr;
+    float sr;
     float cycleTime = 20.0f;
     float colorRot;
     float redPhaseShift;
@@ -211,11 +205,11 @@ void UpdateSpark(global_info_t *global, flurry_info_t *flurry, Spark *s)
     } else if (flurry->currentColorMode == slowCyclicColorMode) {
         cycleTime = 120.0f;
     }
-    colorRot = (float) (2.0*PI/cycleTime);
-    redPhaseShift = 0.0f; /* cycleTime * 0.0f / 3.0f */
+    colorRot = (2.0f * (float)PI / cycleTime);
+    redPhaseShift = 0.0f;
     greenPhaseShift = cycleTime / 3.0f; 
-    bluePhaseShift = cycleTime * 2.0f / 3.0f ;
-    colorTime = flurry->fTime;
+    bluePhaseShift = cycleTime * 2.0f / 3.0f;
+    colorTime = (float)flurry->fTime;
     if (flurry->currentColorMode == whiteColorMode) {
         baseRed = 0.1875f;
         baseGreen = 0.1875f;
@@ -232,32 +226,34 @@ void UpdateSpark(global_info_t *global, flurry_info_t *flurry, Spark *s)
         if(flurry->currentColorMode < slowCyclicColorMode) {
             colorTime = (flurry->currentColorMode / 6.0f) * cycleTime;
         } else {
-            colorTime = flurry->fTime + flurry->flurryRandomSeed;
+            colorTime = (float)(flurry->fTime + flurry->flurryRandomSeed);
         }
-        baseRed = 0.109375f * ((float) cos((colorTime+redPhaseShift)*colorRot)+1.0f);
-        baseGreen = 0.109375f * ((float) cos((colorTime+greenPhaseShift)*colorRot)+1.0f);
-        baseBlue = 0.109375f * ((float) cos((colorTime+bluePhaseShift)*colorRot)+1.0f);
+        baseRed = 0.109375f * (cosf((colorTime+redPhaseShift)*colorRot)+1.0f);
+        baseGreen = 0.109375f * (cosf((colorTime+greenPhaseShift)*colorRot)+1.0f);
+        baseBlue = 0.109375f * (cosf((colorTime+bluePhaseShift)*colorRot)+1.0f);
     }
     
     for (i=0;i<3;i++) {
         old[i] = s->position[i];
     }
     
-    cf = ((float) (cos(7.0*((flurry->fTime)*rotationsPerSecond))+cos(3.0*((flurry->fTime)*rotationsPerSecond))+cos(13.0*((flurry->fTime)*rotationsPerSecond))));
+    cf = (cosf(7.0f * (float)(flurry->fTime * (double)rotationsPerSecond)) +
+          cosf(3.0f * (float)(flurry->fTime * (double)rotationsPerSecond)) +
+          cosf(13.0f * (float)(flurry->fTime * (double)rotationsPerSecond)));
     cf /= 6.0f;
     cf += 2.0f;
-    thisPointInRadians = 2.0 * PI * (double) s->mystery / (double) BIGMYSTERY;
+    thisPointInRadians = 2.0f * (float)PI * (float)s->mystery / (float)BIGMYSTERY;
     
-    s->color[0] = baseRed + 0.0625f * (0.5f + (float) cos((15.0 * (thisPointInRadians + 3.0*thisAngle))) + (float) sin((7.0 * (thisPointInRadians + thisAngle))));
-    s->color[1] = baseGreen + 0.0625f * (0.5f + (float) sin(((thisPointInRadians) + thisAngle)));
-    s->color[2] = baseBlue + 0.0625f * (0.5f + (float) cos((37.0 * (thisPointInRadians + thisAngle))));
-    s->position[0] = fieldRange * cf * (float) cos(11.0 * (thisPointInRadians + (3.0*thisAngle)));
-    s->position[1] = fieldRange * cf * (float) sin(12.0 * (thisPointInRadians + (4.0*thisAngle)));
-    s->position[2] = fieldRange * (float) cos((23.0 * (thisPointInRadians + (12.0*thisAngle))));
+    s->color[0] = baseRed + 0.0625f * (0.5f + cosf(15.0f * (thisPointInRadians + 3.0f * thisAngle)) + sinf(7.0f * (thisPointInRadians + thisAngle)));
+    s->color[1] = baseGreen + 0.0625f * (0.5f + sinf(thisPointInRadians + thisAngle));
+    s->color[2] = baseBlue + 0.0625f * (0.5f + cosf(37.0f * (thisPointInRadians + thisAngle)));
+    s->position[0] = fieldRange * cf * cosf(11.0f * (thisPointInRadians + 3.0f * thisAngle));
+    s->position[1] = fieldRange * cf * sinf(12.0f * (thisPointInRadians + 4.0f * thisAngle));
+    s->position[2] = fieldRange * cosf(23.0f * (thisPointInRadians + 12.0f * thisAngle));
     
-    rotation = thisAngle*0.501 + 5.01 * (double) s->mystery / (double) BIGMYSTERY;
-    cr = cos(rotation);
-    sr = sin(rotation);
+    rotation = thisAngle * 0.501f + 5.01f * (float)s->mystery / (float)BIGMYSTERY;
+    cr = cosf(rotation);
+    sr = sinf(rotation);
     tmpX1 = s->position[0] * cr - s->position[1] * sr;
     tmpY1 = s->position[1] * cr + s->position[0] * sr;
     tmpZ1 = s->position[2];
@@ -270,16 +266,16 @@ void UpdateSpark(global_info_t *global, flurry_info_t *flurry, Spark *s)
     tmpY3 = tmpY2 * cr - tmpZ2 * sr;
     tmpZ3 = tmpZ2 * cr + tmpY2 * sr + seraphDistance;
     
-    rotation = thisAngle*2.501 + 85.01 * (double) s->mystery / (double) BIGMYSTERY;
-    cr = cos(rotation);
-    sr = sin(rotation);
+    rotation = thisAngle * 2.501f + 85.01f * (float)s->mystery / (float)BIGMYSTERY;
+    cr = cosf(rotation);
+    sr = sinf(rotation);
     tmpX4 = tmpX3 * cr - tmpY3 * sr;
     tmpY4 = tmpY3 * cr + tmpX3 * sr;
     tmpZ4 = tmpZ3;
     
-    s->position[0] = (float) tmpX4 + RandBell(5.0f*fieldCoherence);
-    s->position[1] = (float) tmpY4 + RandBell(5.0f*fieldCoherence);
-    s->position[2] = (float) tmpZ4 + RandBell(5.0f*fieldCoherence);
+    s->position[0] = tmpX4 + RandBell(5.0f*fieldCoherence);
+    s->position[1] = tmpY4 + RandBell(5.0f*fieldCoherence);
+    s->position[2] = tmpZ4 + RandBell(5.0f*fieldCoherence);
 
     for (i=0;i<3;i++) {
         s->delta[i] = (s->position[i] - old[i])/flurry->fDeltaTime;

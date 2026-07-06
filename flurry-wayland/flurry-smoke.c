@@ -102,7 +102,8 @@ void UpdateSmoke_ScalarBase(global_info_t *global, flurry_info_t *flurry, SmokeV
                 rsquared = (dx*dx+dy*dy+dz*dz);
                 f = streamSpeed * streamSpeedCoherenceFactor;
 
-                mag = f / (float) sqrt(rsquared);
+                if (rsquared < 0.000001f) rsquared = 0.000001f;
+                mag = f / sqrtf(rsquared);
 
                 s->p[s->nextParticle].delta[0].f[s->nextSubParticle] -= (dx * mag);
                 s->p[s->nextParticle].delta[1].f[s->nextSubParticle] -= (dy * mag);
@@ -142,7 +143,6 @@ void UpdateSmoke_ScalarBase(global_info_t *global, flurry_info_t *flurry, SmokeV
     for(i=0;i<NUMSMOKEPARTICLES/4;i++) {        
         for(k=0; k<4; k++) {
             float dx,dy,dz;
-            float f;
             float rsquared;
             float mag;
             float deltax;
@@ -157,18 +157,27 @@ void UpdateSmoke_ScalarBase(global_info_t *global, flurry_info_t *flurry, SmokeV
             deltay = s->p[i].delta[1].f[k];
             deltaz = s->p[i].delta[2].f[k];
             
+            float p_pos0 = s->p[i].position[0].f[k];
+            float p_pos1 = s->p[i].position[1].f[k];
+            float p_pos2 = s->p[i].position[2].f[k];
+            int p_idx = (i * 4) + k;
+            float C = gravity * frameRateModifier;
+
             for(j=0;j<flurry->numStreams;j++) {
-                dx = s->p[i].position[0].f[k] - flurry->spark[j]->position[0];
-                dy = s->p[i].position[1].f[k] - flurry->spark[j]->position[1];
-                dz = s->p[i].position[2].f[k] - flurry->spark[j]->position[2];
+                dx = p_pos0 - flurry->spark[j]->position[0];
+                dy = p_pos1 - flurry->spark[j]->position[1];
+                dz = p_pos2 - flurry->spark[j]->position[2];
                 rsquared = (dx*dx+dy*dy+dz*dz);
 
-                f = (gravity/rsquared) * frameRateModifier;
+                if (rsquared < 0.000001f) rsquared = 0.000001f;
 
-                if ((((i*4)+k) % flurry->numStreams) == j) {
-                    f *= 1.0f + streamBias;
+                float rsqrt = 1.0f / sqrtf(rsquared);
+                float rsqrt3 = rsqrt * rsqrt * rsqrt;
+                mag = C * rsqrt3;
+
+                if ((p_idx % flurry->numStreams) == j) {
+                    mag *= 1.0f + streamBias;
                 }
-                mag = f / (float) sqrt(rsquared);
                 
                 deltax -= (dx * mag);
                 deltay -= (dy * mag);

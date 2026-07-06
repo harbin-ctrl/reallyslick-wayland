@@ -197,7 +197,7 @@ void GLRenderScene(global_info_t *global, flurry_info_t *flurry, double b)
     flurry->fTime = TimeInSecondsSinceStart(global) + flurry->flurryRandomSeed;
     flurry->fDeltaTime = flurry->fTime - flurry->fOldTime;
 
-    flurry->drag = (float) pow(0.9965,flurry->fDeltaTime*85.0);
+    flurry->drag = powf(0.9965f, (float)(flurry->fDeltaTime * 85.0));
 
     UpdateStar(global, flurry, flurry->star);
 
@@ -498,7 +498,7 @@ draw_flurry(ModeInfo * mi)
     glColor4f(0.0, 0.0, 0.0, alpha);
     glRectd(0, 0, global->sys_glWidth, global->sys_glHeight);
 
-    brite = pow(deltaFrameTime,0.75) * 10;
+    brite = powf((float)deltaFrameTime, 0.75f) * 10.0f;
     for (flurry = global->flurry; flurry; flurry=flurry->next) {
 	GLRenderScene(global, flurry, brite * flurry->briteFactor);
     }

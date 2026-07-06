@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=gnu99 -pedantic -Wall -g -O2 -DHAVE_CONFIG_H -DUSE_GL -I. $(shell pkg-config --cflags wayland-client wayland-egl egl gl)
+CFLAGS = -std=gnu99 -pedantic -Wall -O3 -ffast-math -march=armv8-a -mtune=cortex-a72 -DHAVE_CONFIG_H -DUSE_GL -I. $(shell pkg-config --cflags wayland-client wayland-egl egl gl)
 LIBS = $(shell pkg-config --libs wayland-client wayland-egl egl gl) -lGLU -lm
 
 SRCS = main.c flurry.c flurry-smoke.c flurry-spark.c flurry-star.c flurry-texture.c \
