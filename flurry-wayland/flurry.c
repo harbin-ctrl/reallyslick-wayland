@@ -461,6 +461,7 @@ draw_flurry(ModeInfo * mi)
     GLfloat alpha;
 
     global_info_t *global = flurry_info + MI_SCREEN(mi);
+    global->bbox_empty = 1;
     flurry_info_t *flurry;
 
     newFrameTime = currentTime();

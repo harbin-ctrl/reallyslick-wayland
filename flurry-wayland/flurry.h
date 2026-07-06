@@ -291,7 +291,13 @@ struct _global_info_t {
 
 	flurry_info_t *flurry;
         GLuint texid;
+	float bbox_min_x;
+	float bbox_min_y;
+	float bbox_max_x;
+	float bbox_max_y;
+	int bbox_empty;
 };
+extern global_info_t *flurry_info;
 
 #define kNumSpectrumEntries 512
 
@@ -299,6 +305,25 @@ double TimeInSecondsSinceStart(const global_info_t *global);
 
 void init_flurry(ModeInfo * mi);
 void draw_flurry(ModeInfo * mi);
+
+static inline void update_bbox(global_info_t *global, float x, float y, float radius) {
+    float min_x = x - radius;
+    float max_x = x + radius;
+    float min_y = y - radius;
+    float max_y = y + radius;
+    if (global->bbox_empty) {
+        global->bbox_min_x = min_x;
+        global->bbox_max_x = max_x;
+        global->bbox_min_y = min_y;
+        global->bbox_max_y = max_y;
+        global->bbox_empty = 0;
+    } else {
+        if (min_x < global->bbox_min_x) global->bbox_min_x = min_x;
+        if (max_x > global->bbox_max_x) global->bbox_max_x = max_x;
+        if (min_y < global->bbox_min_y) global->bbox_min_y = min_y;
+        if (max_y > global->bbox_max_y) global->bbox_max_y = max_y;
+    }
+}
 void reshape_flurry(ModeInfo *mi, int width, int height);
 void free_flurry(ModeInfo * mi);
 

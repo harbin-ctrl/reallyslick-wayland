@@ -359,6 +359,12 @@ int main(int argc, char **argv) {
     init_trail_texture(window_width, window_height);
     init_flurry(&mi);
 
+    float prev_bbox_min_x = 0.0f;
+    float prev_bbox_min_y = 0.0f;
+    float prev_bbox_max_x = 0.0f;
+    float prev_bbox_max_y = 0.0f;
+    bool prev_bbox_valid = false;
+
     while (running) {
         wl_display_dispatch_pending(display);
 
@@ -370,12 +376,14 @@ int main(int argc, char **argv) {
             reshape_flurry(&mi, window_width, window_height);
             init_trail_texture(window_width, window_height);
             skip_copy = true;
+            prev_bbox_valid = false;
             size_changed = false;
         }
 
         if (preset_changed) {
             reshape_flurry(&mi, window_width, window_height);
             init_trail_texture(window_width, window_height);
+            prev_bbox_valid = false;
             preset_changed = false;
         }
 
@@ -425,10 +433,74 @@ int main(int argc, char **argv) {
 
         // 3. Copy the finished frame from back buffer back to the trail texture
         if (!skip_copy) {
-            glBindTexture(GL_TEXTURE_2D, trail_texture);
-            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, window_width, window_height);
+            float x_min = 0.0f;
+            float y_min = 0.0f;
+            float x_max = (float)window_width;
+            float y_max = (float)window_height;
+
+            global_info_t *global = flurry_info + MI_SCREEN(&mi);
+
+            if (!global->bbox_empty) {
+                float p_min_x = global->bbox_min_x - 64.0f;
+                float p_min_y = global->bbox_min_y - 64.0f;
+                float p_max_x = global->bbox_max_x + 64.0f;
+                float p_max_y = global->bbox_max_y + 64.0f;
+
+                if (prev_bbox_valid) {
+                    float shrink_speed = 4.0f;
+                    float lag_min_x = prev_bbox_min_x + shrink_speed;
+                    float lag_min_y = prev_bbox_min_y + shrink_speed;
+                    float lag_max_x = prev_bbox_max_x - shrink_speed;
+                    float lag_max_y = prev_bbox_max_y - shrink_speed;
+
+                    if (lag_min_x > lag_max_x) {
+                        lag_min_x = p_min_x;
+                        lag_max_x = p_max_x;
+                    }
+                    if (lag_min_y > lag_max_y) {
+                        lag_min_y = p_min_y;
+                        lag_max_y = p_max_y;
+                    }
+
+                    x_min = p_min_x < lag_min_x ? p_min_x : lag_min_x;
+                    y_min = p_min_y < lag_min_y ? p_min_y : lag_min_y;
+                    x_max = p_max_x > lag_max_x ? p_max_x : lag_max_x;
+                    y_max = p_max_y > lag_max_y ? p_max_y : lag_max_y;
+                } else {
+                    x_min = p_min_x;
+                    y_min = p_min_y;
+                    x_max = p_max_x;
+                    y_max = p_max_y;
+                }
+
+                if (x_min < 0.0f) x_min = 0.0f;
+                if (y_min < 0.0f) y_min = 0.0f;
+                if (x_max > (float)window_width) x_max = (float)window_width;
+                if (y_max > (float)window_height) y_max = (float)window_height;
+
+                prev_bbox_min_x = x_min;
+                prev_bbox_min_y = y_min;
+                prev_bbox_max_x = x_max;
+                prev_bbox_max_y = y_max;
+                prev_bbox_valid = true;
+            } else {
+                prev_bbox_valid = false;
+                x_min = 0.0f;
+                y_min = 0.0f;
+                x_max = 0.0f;
+                y_max = 0.0f;
+            }
+
+            int copy_w = (int)(x_max - x_min);
+            int copy_h = (int)(y_max - y_min);
+
+            if (copy_w > 0 && copy_h > 0) {
+                glBindTexture(GL_TEXTURE_2D, trail_texture);
+                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, (int)x_min, (int)y_min, (int)x_min, (int)y_min, copy_w, copy_h);
+            }
         } else {
             skip_copy = false;
+            prev_bbox_valid = false;
         }
 
 

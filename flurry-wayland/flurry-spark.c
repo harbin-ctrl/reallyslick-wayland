@@ -63,6 +63,7 @@ void DrawSpark(global_info_t *global, flurry_info_t *flurry, Spark *s)
 	sx = s->position[0] * global->sys_glWidth / z + global->sys_glWidth * 0.5f;
 	sy = s->position[1] * global->sys_glWidth / z + global->sys_glHeight * 0.5f;
 	w = width*4.0f / z;
+	update_bbox(global, sx, sy, w);
 	
 	screenx = sx;
 	screeny = sy;

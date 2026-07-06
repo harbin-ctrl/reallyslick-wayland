@@ -989,6 +989,8 @@ void DrawSmoke_Scalar(global_info_t *global, flurry_info_t *flurry, SmokeV *s, f
 			float oldy = s->p[i].oldposition[1].f[k];
 			float oldscreenx = (oldx * global->sys_glWidth / oldz) + wslash2;
 			float oldscreeny = (oldy * global->sys_glWidth / oldz) + hslash2;
+			update_bbox(global, sx, sy, w);
+			update_bbox(global, oldscreenx, oldscreeny, w);
 			float dx = (sx-oldscreenx);
 			float dy = (sy-oldscreeny);
 					
