@@ -70,7 +70,14 @@ void CDeco::Render ()
 {
 
   glColor3fv (&_color.red);
+  if (_texture == TextureId (TEXTURE_TRIM)) {
+    glEnable (GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset (-1.0f, -1.0f);
+  }
   _mesh->Render ();
+  if (_texture == TextureId (TEXTURE_TRIM)) {
+    glDisable (GL_POLYGON_OFFSET_FILL);
+  }
 
 }
 
@@ -262,6 +269,7 @@ void CDeco::CreateLightTrim (GLvector* chain, int count, float height, int seed,
   float      row;
   quad_strip qs;
 
+  _use_alpha = false;
   _color = color;
   _center = glVector (0.0f, 0.0f, 0.0f);
   qs.index_list.reserve(count * 2 + 2);
@@ -282,7 +290,7 @@ void CDeco::CreateLightTrim (GLvector* chain, int count, float height, int seed,
       prev = count + prev;
     next = (i + 1) % count;
     to = glVectorNormalize (chain[next] - chain[prev]);
-    out = glVectorCrossProduct (glVector (0.0f, 1.0f, 0.0f), to) * LOGO_OFFSET;
+    out = glVectorCrossProduct (glVector (0.0f, 1.0f, 0.0f), to) * 0.2f;
     p.position = chain[i % count] + out; p.uv = glVector (u, v2);
     _mesh->VertexAdd (p);
     qs.index_list.push_back(index++);
