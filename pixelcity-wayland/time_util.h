@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 extern int GetTimeInMillis();
+extern double GetTimeInSeconds();
 
 #ifdef __cplusplus
 }

@@ -16,9 +16,6 @@
 
 const char* bloomVertexShader =
     "#version 140\n"
-    "in vec4 gl_Vertex;\n"
-    "in vec4 gl_MultiTexCoord0;\n"
-    "uniform mat4 gl_ModelViewProjectionMatrix;\n"
     "out vec2 vTexCoord;\n"
     "void main() {\n"
     "    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"

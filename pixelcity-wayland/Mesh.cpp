@@ -144,6 +144,8 @@ void CMesh::Render ()
     glVertex3fv (&_vertex[ci->index_list[1]].position.x);
     glEnd ();
     
+#define CULL_CUBE_BOTTOMS 1
+#if !CULL_CUBE_BOTTOMS
     glBegin (GL_QUADS);
     glTexCoord2fv (&_vertex[ci->index_list[6]].uv.x);
     glVertex3fv (&_vertex[ci->index_list[0]].position.x);
@@ -151,6 +153,7 @@ void CMesh::Render ()
     glVertex3fv (&_vertex[ci->index_list[4]].position.x);
     glVertex3fv (&_vertex[ci->index_list[6]].position.x);
     glEnd ();
+#endif
 
   
   }

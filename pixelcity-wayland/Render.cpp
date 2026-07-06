@@ -169,7 +169,7 @@ enum
 static HDC			        hDC;
 static HGLRC		        hRC;
 #else
-static GLXContext       ctx;
+// static GLXContext       ctx;
 #endif
 static float            render_aspect;
 static float            fog_distance;
@@ -339,8 +339,10 @@ static void build_title_grid ()
         int gy = full_gh - 1 - cy;                            // flip
         title_grid[gy][cx] = (unsigned char) on;
         if (on) {
-          if (cx < minx) minx = cx;  if (cx > maxx) maxx = cx;
-          if (gy < miny) miny = gy;  if (gy > maxy) maxy = gy;
+          if (cx < minx) minx = cx;
+          if (cx > maxx) maxx = cx;
+          if (gy < miny) miny = gy;
+          if (gy > maxy) maxy = gy;
         }
       }
     free (px);
@@ -452,7 +454,7 @@ static void do_loading_screen ()
 
 -----------------------------------------------------------------------------*/
 
-static void do_effects (int type)
+static void __attribute__((unused)) do_effects (int type)
 {
 
   float           hue1, hue2, hue3, hue4;
@@ -731,12 +733,10 @@ void static do_help (void)
   char*     text;
   int       line;
   char      parse[HELP_SIZE];
-  int       x;
   
   strcpy (parse, help);
   line = 0;
   text = strtok (parse, "\n");
-  x = 10;
   while (text) {
     RenderPrint (line + 2, text);
     text = strtok (NULL, "\n");

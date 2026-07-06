@@ -68,7 +68,7 @@ static unsigned     last_move;
 
 -----------------------------------------------------------------------------*/
 
-static GLvector flycam_position (unsigned t)
+static GLvector flycam_position (double t)
 {
 
   unsigned    leg;
@@ -77,9 +77,9 @@ static GLvector flycam_position (unsigned t)
   GLbbox      hot_zone;
 
   hot_zone = WorldHotZone ();
-  t %= FLYCAM_CIRCUT; 
-  leg = t / FLYCAM_LEG;
-  delta = (float)(t % FLYCAM_LEG) / FLYCAM_LEG;
+  t = fmod(t, (double)FLYCAM_CIRCUT); 
+  leg = (unsigned)(t / FLYCAM_LEG);
+  delta = (float)fmod(t, (double)FLYCAM_LEG) / FLYCAM_LEG;
   switch (leg) {
   case 0:
     start = glVector (hot_zone.min.x, 25.0f, hot_zone.min.z);
@@ -113,24 +113,31 @@ static void do_auto_cam ()
 
   float     dist;
   unsigned  t;
-  unsigned  elapsed;
-  unsigned  now;
+  float     elapsed;
+  double    now_sec;
+  double    now;
   int       behavior; 
   GLvector  target;
 
-  now = GetTimeInMillis ();
-  elapsed = now - last_update;
-  elapsed = MIN (elapsed, 50); //limit to 1/20th second worth of time
-  if (elapsed == 0)
+  now_sec = GetTimeInSeconds ();
+  now = now_sec * 1000.0;
+  
+  static double last_update_sec = 0.0;
+  if (last_update_sec == 0.0) last_update_sec = now_sec;
+  
+  elapsed = (float)((now_sec - last_update_sec) * 1000.0);
+  elapsed = MIN (elapsed, 50.0f); //limit to 1/20th second worth of time
+  if (elapsed <= 0.0f)
     return;
-  last_update = now;
+  last_update_sec = now_sec;
+  last_update = (unsigned)now;
   t = time (NULL) % CAMERA_CYCLE_LENGTH;
 #if SCREENSAVER
   behavior = t / CAMERA_CHANGE_INTERVAL;
 #else
   behavior = camera_behavior;
 #endif
-  tracker += (float)elapsed / 300.0f;
+  tracker += elapsed / 300.0f;
   //behavior = CAMERA_FLYCAM1; 
   switch (behavior) {
   case CAMERA_ORBIT_INWARD:
