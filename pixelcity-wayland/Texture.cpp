@@ -31,6 +31,9 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <thread>
+#include <atomic>
+#include <vector>
 #define GL_GLEXT_PROTOTYPES   // expose glGenerateMipmap (core GL 3.0)
 #include <GL/gl.h>
 #include <GL/glu.h>
@@ -245,11 +248,13 @@ public:
   bool              _masked;
   bool              _mipmap;
   bool              _clamp;
+  uint32_t          _seed;      // per-texture RNG seed for the software window bake
 public:
   CTexture*         _next;
                     CTexture (int id, int size, bool mipmap, bool clamp, bool masked);
   void              Clear () { _ready = false; }
   void              Rebuild ();
+  bool              RebuildSoftwareWindows ();
   void              DrawWindows ();
   void              DrawSky ();
   void              DrawHeadlight ();
@@ -433,6 +438,287 @@ static void window (int x, int y, int size, int id, GLrgba color)
 }
 
 /*-----------------------------------------------------------------------------
+
+  Software rasteriser for the building-window textures.
+
+  A faithful CPU port of DrawWindows()/window()/drawrect() above, writing RGBA8
+  into a caller-supplied buffer instead of issuing immediate-mode GL. This lets
+  the nine building textures (~1s of serial GL draw at startup) be generated on
+  worker threads with no GL context, then uploaded on the main thread. Same
+  algorithm and RNG-call sequence -> same look; only the RNG source differs (a
+  per-texture seeded stream instead of the shared global one).
+
+-----------------------------------------------------------------------------*/
+
+// Self-contained xorshift32 PRNG -- one instance per texture, so no shared state
+// and no locking. Quality/range are ample for window noise.
+struct SoftRng
+{
+  uint32_t s;
+  SoftRng (uint32_t seed) : s (seed ? seed : 0x1234567u) {}
+  uint32_t next () { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return s; }
+  int      val (int range) { return range ? (int)(next () % (uint32_t)range) : 0; }
+};
+
+static inline void soft_put (uint8_t* buf, int size, int x, int y,
+                             float r, float g, float b)
+{
+  if (x < 0 || y < 0 || x >= size || y >= size)
+    return;
+  uint8_t* p = buf + ((size_t)y * size + x) * 4;
+  p[0] = (uint8_t)(r <= 0 ? 0 : (r >= 1 ? 255 : r * 255.0f + 0.5f));
+  p[1] = (uint8_t)(g <= 0 ? 0 : (g >= 1 ? 255 : g * 255.0f + 0.5f));
+  p[2] = (uint8_t)(b <= 0 ? 0 : (b >= 1 ? 255 : b * 255.0f + 0.5f));
+  p[3] = 255;
+}
+
+static inline void soft_blend (uint8_t* buf, int size, int x, int y,
+                               float r, float g, float b, float a)
+{
+  if (x < 0 || y < 0 || x >= size || y >= size || a <= 0.0f)
+    return;
+  if (a > 1.0f) a = 1.0f;
+  uint8_t* p = buf + ((size_t)y * size + x) * 4;
+  p[0] = (uint8_t)(p[0] * (1.0f - a) + r * 255.0f * a);
+  p[1] = (uint8_t)(p[1] * (1.0f - a) + g * 255.0f * a);
+  p[2] = (uint8_t)(p[2] * (1.0f - a) + b * 255.0f * a);
+}
+
+// CPU port of drawrect(): the base fill is opaque; bright windows get colour
+// sparkle points; every window gets dark vertical noise streaks (Gouraud alpha).
+static void soft_drawrect (uint8_t* buf, int size, int left, int top, int right, int bottom,
+                           float cr, float cg, float cb, SoftRng& rng)
+{
+  int i, j;
+  if (left == right) {                        // 1px vertical line (opaque)
+    for (j = top; j < bottom; j++)
+      soft_put (buf, size, left, j, cr, cg, cb);
+  }
+  if (top == bottom) {                        // 1px horizontal line (opaque)
+    for (i = left; i < right; i++)
+      soft_put (buf, size, i, top, cr, cg, cb);
+  } else {                                    // filled rect + noise
+    for (j = top; j < bottom; j++)
+      for (i = left; i < right; i++)
+        soft_put (buf, size, i, j, cr, cg, cb);
+
+    float average = (cr + cb + cg) / 3.0f;
+    bool  bright = average > 0.5f;
+    int   potential = (int)(average * 255.0f);
+
+    if (bright) {
+      for (i = left + 1; i < right - 1; i++) {
+        for (j = top + 1; j < bottom - 1; j++) {
+          float hue = 0.2f + (float)rng.val (100) / 300.0f
+                            + (float)rng.val (100) / 300.0f
+                            + (float)rng.val (100) / 300.0f;
+          GLrgba cn = glRgbaFromHsl (hue, 0.3f, 0.5f);
+          float a = (float)rng.val (potential) / 144.0f;
+          soft_blend (buf, size, i, j, cn.red, cn.green, cn.blue, a);
+        }
+      }
+    }
+    int height = (bottom - top) + (rng.val (3) - 1) + (rng.val (3) - 1);
+    for (i = left; i < right; i++) {
+      if (rng.val (3) == 0)
+        rng.val (4);                          // consume, matches the GL path
+      if (rng.val (6) == 0) {
+        int h = bottom - top;
+        h = rng.val (h);
+        h = rng.val (h);
+        h = rng.val (h);
+        height = ((bottom - top) + h) / 2;
+      }
+      float a_top = (float)rng.val (256) / 256.0f;
+      float a_bot = (float)rng.val (256) / 256.0f;
+      int y0 = bottom - height;
+      for (j = y0; j < bottom; j++) {
+        float t = (height > 0) ? (float)(j - y0) / (float)height : 0.0f;
+        soft_blend (buf, size, i, j, 0, 0, 0, a_top * (1.0f - t) + a_bot * t);
+      }
+    }
+  }
+}
+
+// CPU port of window(): the nine building styles, scaling the base colour.
+static void soft_window (uint8_t* buf, int size, int x, int y, int seg, int id,
+                         float cr, float cg, float cb, SoftRng& rng)
+{
+  int margin = seg / 3;
+  int half = seg / 2;
+  int i;
+  switch (id) {
+  case TEXTURE_BUILDING1:
+    soft_drawrect (buf, size, x+1, y+1, x+seg-1, y+seg-1, cr, cg, cb, rng);
+    break;
+  case TEXTURE_BUILDING2:
+    soft_drawrect (buf, size, x+margin, y+1, x+seg-margin, y+seg-1, cr, cg, cb, rng);
+    break;
+  case TEXTURE_BUILDING3:
+    soft_drawrect (buf, size, x+1, y+1, x+half-1, y+seg-margin, cr, cg, cb, rng);
+    soft_drawrect (buf, size, x+half+1, y+1, x+seg-1, y+seg-margin, cr, cg, cb, rng);
+    break;
+  case TEXTURE_BUILDING4:
+    soft_drawrect (buf, size, x+1, y+1, x+seg-1, y+seg-1, cr, cg, cb, rng);
+    i = rng.val (seg-2);
+    soft_drawrect (buf, size, x+1, y+1, x+seg-1, y+i+1, cr*0.3f, cg*0.3f, cb*0.3f, rng);
+    break;
+  case TEXTURE_BUILDING5:
+    soft_drawrect (buf, size, x+1, y+1, x+seg-1, y+seg-1, cr, cg, cb, rng);
+    soft_drawrect (buf, size, x+margin, y+1, x+margin, y+seg-1, cr*0.7f, cg*0.7f, cb*0.7f, rng);
+    soft_drawrect (buf, size, x+seg-margin-1, y+1, x+seg-margin-1, y+seg-1, cr*0.3f, cg*0.3f, cb*0.3f, rng);
+    break;
+  case TEXTURE_BUILDING6:
+    soft_drawrect (buf, size, x+1, y+1, x+seg-1, y+seg-margin, cr, cg, cb, rng);
+    break;
+  case TEXTURE_BUILDING7:
+    soft_drawrect (buf, size, x+2, y+1, x+seg-1, y+seg-1, cr, cg, cb, rng);
+    soft_drawrect (buf, size, x+2, y+half, x+seg-1, y+half, cr*0.2f, cg*0.2f, cb*0.2f, rng);
+    soft_drawrect (buf, size, x+half, y+1, x+half, y+seg-1, cr*0.2f, cg*0.2f, cb*0.2f, rng);
+    break;
+  case TEXTURE_BUILDING8:
+    soft_drawrect (buf, size, x+half-1, y+1, x+half+1, y+seg-margin, cr, cg, cb, rng);
+    break;
+  case TEXTURE_BUILDING9:
+    soft_drawrect (buf, size, x+1, y+margin, x+seg-1, y+seg-margin-1, cr, cg, cb, rng);
+    break;
+  }
+}
+
+// CPU port of DrawWindows(): fills one building texture into buf (RGBA8, size x
+// size). Pure CPU + caller's seed -> safe to run on a worker thread.
+static void soft_draw_windows (uint8_t* buf, int size, int id, uint32_t seed)
+{
+  SoftRng rng (seed);
+  int seg = size / SEGMENTS_PER_TEXTURE;
+  int run = 0;
+  int run_length = rng.val (9) + 2;
+  int lit_density = 2 + rng.val (2) + rng.val (2);
+  bool lit = false;
+
+  for (int y = 0; y < SEGMENTS_PER_TEXTURE; y++) {
+    if (!(y % 8) && y > 0) {
+      run = 0;
+      run_length = rng.val (9) + 2;
+      lit_density = 2 + rng.val (2) + rng.val (2);
+      lit = false;
+    }
+    for (int x = 0; x < SEGMENTS_PER_TEXTURE; x++) {
+      if (run < 1) {
+        run = rng.val (run_length);
+        lit = rng.val (lit_density) == 0;
+      }
+      float cr, cg, cb;
+      if (lit) {
+        float v = 0.5f + (float)(rng.next () % 128) / 256.0f;
+        cr = v + (float)rng.val (10) / 50.0f;   // per-channel tint (RANDOM_COLOR_SHIFT)
+        cg = v + (float)rng.val (10) / 50.0f;
+        cb = v + (float)rng.val (10) / 50.0f;
+      } else {
+        cr = cg = cb = (float)(rng.next () % 40) / 256.0f;
+      }
+      soft_window (buf, size, x * seg, y * seg, seg, id, cr, cg, cb, rng);
+      run--;
+    }
+  }
+}
+
+// Bake a building-window texture on the CPU and upload it. Returns false for
+// non-building textures (leaving them on the original GL immediate-mode path).
+bool CTexture::RebuildSoftwareWindows ()
+{
+  if (_my_id < TEXTURE_BUILDING1 || _my_id > TEXTURE_BUILDING9)
+    return false;
+
+  _size = _desired_size;                       // 512, always within GL limits
+  uint8_t* buf = (uint8_t*) calloc ((size_t)_size * _size * 4, 1);
+  if (!buf)
+    return false;
+  soft_draw_windows (buf, _size, _my_id, _seed);
+
+  glBindTexture (GL_TEXTURE_2D, _glid);
+  glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, _size, _size, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf);
+  free (buf);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glGenerateMipmap (GL_TEXTURE_2D);
+  _ready = true;
+  return true;
+}
+
+/*-----------------------------------------------------------------------------
+
+  Parallel bake of the building-window textures.
+
+  soft_draw_windows() is pure CPU, so the nine building textures can be filled on
+  a worker pool (lock-free work-stealing via an atomic index) and then uploaded
+  on the main/GL thread. This is the foundation Arc 2 (the streaming "city wakes
+  up" reveal) builds on -- generation lives off the GL thread.
+
+-----------------------------------------------------------------------------*/
+
+struct BakeUnit { uint8_t* buf; int size; int id; uint32_t seed; };
+
+static void bake_worker (BakeUnit* units, int count, std::atomic<int>* next)
+{
+  for (;;) {
+    int i = next->fetch_add (1);
+    if (i >= count)
+      break;
+    if (units[i].buf)
+      soft_draw_windows (units[i].buf, units[i].size, units[i].id, units[i].seed);
+  }
+}
+
+static void bake_building_textures_parallel ()
+{
+  std::vector<CTexture*> texs;
+  for (CTexture* t = head; t; t = t->_next)
+    if (t->_my_id >= TEXTURE_BUILDING1 && t->_my_id <= TEXTURE_BUILDING9 && !t->_ready)
+      texs.push_back (t);
+  if (texs.empty ())
+    return;
+
+  std::vector<BakeUnit> units (texs.size ());
+  for (size_t i = 0; i < texs.size (); i++) {
+    texs[i]->_size = texs[i]->_desired_size;     // 512, within GL limits
+    int sz = texs[i]->_size;
+    units[i].buf  = (uint8_t*) calloc ((size_t)sz * sz * 4, 1);
+    units[i].size = sz;
+    units[i].id   = texs[i]->_my_id;
+    units[i].seed = texs[i]->_seed;
+  }
+
+  // Fill on a worker pool; the main thread pitches in since it would otherwise
+  // just block here. hardware_concurrency workers total keeps all cores busy.
+  std::atomic<int> next (0);
+  unsigned hw = std::thread::hardware_concurrency ();
+  int nthreads = hw ? (int)hw : 2;
+  if (nthreads > (int)units.size ())
+    nthreads = (int)units.size ();
+  std::vector<std::thread> pool;
+  for (int t = 1; t < nthreads; t++)
+    pool.emplace_back (bake_worker, units.data (), (int)units.size (), &next);
+  bake_worker (units.data (), (int)units.size (), &next);
+  for (auto& th : pool)
+    th.join ();
+
+  // Upload on this (GL) thread.
+  for (size_t i = 0; i < texs.size (); i++) {
+    if (!units[i].buf)
+      continue;
+    glBindTexture (GL_TEXTURE_2D, texs[i]->_glid);
+    glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, units[i].size, units[i].size, 0,
+                  GL_RGBA, GL_UNSIGNED_BYTE, units[i].buf);
+    free (units[i].buf);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap (GL_TEXTURE_2D);
+    texs[i]->_ready = true;
+  }
+}
+
+/*-----------------------------------------------------------------------------
                           
 -----------------------------------------------------------------------------*/
 
@@ -449,6 +735,9 @@ CTexture::CTexture (int id, int size, bool mipmap, bool clamp, bool masked)
   _half = size / 2;
   _segment_size = size / SEGMENTS_PER_TEXTURE;
   _ready = false;
+  // Independent seed per texture so the software window bake (RebuildSoftwareWindows)
+  // is deterministic and thread-safe without touching the global RNG at bake time.
+  _seed = (RandomVal () << 1) | 1u;
   _next = head;
   head = this;
 
@@ -692,6 +981,12 @@ void CTexture::Rebuild ()
   int             lapsed;
 
   start = GetTimeInMillis ();
+  // Building-window textures bake on the CPU (see RebuildSoftwareWindows) instead
+  // of via immediate-mode GL -- much faster and, shortly, parallelisable.
+  if (RebuildSoftwareWindows ()) {
+    build_time += GetTimeInMillis () - start;
+    return;
+  }
   _size = _desired_size;
   //Normally we bake by drawing into the window viewport, so a texture can't be
   //bigger than the view. Only when the desired size exceeds that (e.g. the 1024
@@ -945,6 +1240,13 @@ void TextureUpdate (void)
   // so TextureUpdate() only has to build the static textures once at startup.
   if (textures_done)
     return;
+  // The building-window textures bake in parallel in a single pass (all cores);
+  // the remaining textures stay on the one-per-frame GL path below.
+  for (CTexture* t = head; t; t = t->_next)
+    if (t->_my_id >= TEXTURE_BUILDING1 && t->_my_id <= TEXTURE_BUILDING9 && !t->_ready) {
+      bake_building_textures_parallel ();
+      break;
+    }
   for (CTexture* t = head; t; t = t->_next) {
     if (!t->_ready) {
       t->Rebuild();

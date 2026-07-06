@@ -46,13 +46,13 @@ wl_main.o wl_main.d: xdg-shell-client-protocol.h xdg-decoration-unstable-v1-clie
 	@$(CXX) -MM -MP -MF $@ $(CPPFLAGS) $<
 
 pixelcity: $(OBJS)
-	g++ -o $@ -g $(OBJS) $(LDFLAGS) -lm -lOpenGL -lGLU
+	g++ -o $@ -g $(OBJS) $(LDFLAGS) -lm -lOpenGL -lGLU -pthread
 
 WL_CFLAGS := $(shell pkg-config --cflags wayland-client wayland-egl egl xkbcommon)
 WL_LIBS   := $(shell pkg-config --libs wayland-client wayland-egl egl xkbcommon)
 
 CFLAGS=-Wall -D_FILE_OFFSET_BITS=64 -DWAYLAND
-CXXFLAGS=-Wall -D_FILE_OFFSET_BITS=64 -DWAYLAND
+CXXFLAGS=-Wall -D_FILE_OFFSET_BITS=64 -DWAYLAND -pthread
 # The runtime no longer uses FreeType/fontconfig -- the glyphs are baked into
 # font_data.c by fontgen (see the regen-fonts target). Only fontgen links them.
 CPPFLAGS=$(WL_CFLAGS)
