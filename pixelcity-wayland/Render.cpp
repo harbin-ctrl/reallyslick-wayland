@@ -252,23 +252,134 @@ static void do_progress (float center_x, float center_y, float radius, float opa
 
 /*-----------------------------------------------------------------------------
 
-  Self-contained loading screen drawn directly to the default framebuffer.
-  This does NOT call do_effects() or touch any FBO / bloom / texture-combiner
-  state -- those subsystems aren't ready yet during texture compilation.
+  Pixellated "PixelCity" title card.
+
+  The bitmap fonts are fixed-size (glBitmap can't be scaled), so we render the
+  title once at its native pixel size into a texture, then draw it as a big
+  centred quad with GL_NEAREST filtering -- every font pixel becomes a chunky
+  block. On-theme for *Pixel* City, and it serves triple duty: the loading
+  screen, the initial fade-in, and the cross-fade transition into the city.
+
+-----------------------------------------------------------------------------*/
+
+#define TITLE_TEXT        "PixelCity"
+#define TITLE_FONT        0            // Anton-Regular: ultra-heavy grotesque
+#define TITLE_FADE_IN_MS  900          // title ramps up from black over ~0.9s
+
+static GLuint   title_tex = 0;
+static int      title_w = 0, title_h = 0;
+static int      loading_start_ms = 0;
+
+// Native pixel width of a string in the given baked font (sum of pen advances).
+static int title_text_width (int font, const char* s)
+{
+  int w = 0;
+  font %= FONT_COUNT;
+  for (; *s; s++) {
+    int idx = (unsigned char)*s - font_first_char;
+    if (idx >= 0 && idx < font_glyph_count)
+      w += (int)font_glyphs[font][idx].xmove;
+  }
+  return w;
+}
+
+// Render TITLE_TEXT white-on-black once, at the font's native size, and capture
+// it from the bottom-left of the default framebuffer into title_tex (NEAREST so
+// it stays crisp/blocky when scaled up).
+static void build_title_texture ()
+{
+  title_w = MIN (title_text_width (TITLE_FONT, TITLE_TEXT), render_width);
+  title_h = MIN (FONT_SIZE + FONT_SIZE / 2, render_height);  // room for caps + 'y' tail
+
+  if (glBindFramebufferEXT)
+    glBindFramebufferEXT (GL_FRAMEBUFFER, 0);
+  glViewport (0, 0, render_width, render_height);
+  glMatrixMode (GL_PROJECTION);
+  glPushMatrix ();
+  glLoadIdentity ();
+  glOrtho (0, render_width, render_height, 0, 0.1f, 2048);
+  glMatrixMode (GL_MODELVIEW);
+  glPushMatrix ();
+  glLoadIdentity ();
+  glTranslatef (0, 0, -1.0f);
+  glDisable (GL_DEPTH_TEST);
+  glDepthMask (false);
+  glDisable (GL_BLEND);
+  glDisable (GL_TEXTURE_2D);
+  glDisable (GL_FOG);
+  glClearColor (0, 0, 0, 1);
+  glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  // Baseline sits a little above the bottom edge so the whole glyph (including
+  // the 'y' descender) lands in framebuffer rows [0 .. title_h].
+  RenderPrint (0, render_height - FONT_SIZE / 3, TITLE_FONT, glRgba (1.0f), TITLE_TEXT);
+
+  if (!title_tex)
+    glGenTextures (1, &title_tex);
+  glBindTexture (GL_TEXTURE_2D, title_tex);
+  glCopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, 0, 0, title_w, title_h, 0);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glBindTexture (GL_TEXTURE_2D, 0);
+
+  glPopMatrix ();
+  glMatrixMode (GL_PROJECTION);
+  glPopMatrix ();
+  glMatrixMode (GL_MODELVIEW);
+  glDepthMask (true);
+}
+
+// Draw the title centred and scaled up with nearest-neighbour, additively so the
+// black texels contribute nothing (no visible box) and only the letters show --
+// which also lets it sit seamlessly over a black veil during the cross-fade.
+// Assumes a 2D ortho (0,W,H,0) is already active. alpha 0..1.
+static void draw_pixel_title (float alpha)
+{
+  if (!title_tex || alpha <= 0.0f)
+    return;
+
+  // Span ~55% of the width, but never taller than ~30% of the height.
+  float scale = (0.55f * render_width) / (float)title_w;
+  if (title_h * scale > 0.30f * render_height)
+    scale = (0.30f * render_height) / (float)title_h;
+  float w = title_w * scale;
+  float h = title_h * scale;
+  float l = render_width  / 2.0f - w / 2.0f, r = l + w;
+  float t = render_height / 2.0f - h / 2.0f, b = t + h;
+
+  glEnable (GL_TEXTURE_2D);
+  glBindTexture (GL_TEXTURE_2D, title_tex);
+  glEnable (GL_BLEND);
+  glBlendFunc (GL_SRC_ALPHA, GL_ONE);           // additive
+  glColor4f (1, 1, 1, alpha);
+  glBegin (GL_QUADS);                            // texture is bottom-up: v=1 at top
+  glTexCoord2f (0, 1); glVertex2f (l, t);
+  glTexCoord2f (0, 0); glVertex2f (l, b);
+  glTexCoord2f (1, 0); glVertex2f (r, b);
+  glTexCoord2f (1, 1); glVertex2f (r, t);
+  glEnd ();
+  glBindTexture (GL_TEXTURE_2D, 0);
+  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+/*-----------------------------------------------------------------------------
+
+  Loading screen: solid black with the pixellated title fading up. Drawn
+  directly to the default framebuffer (no FBO / bloom -- those aren't ready yet
+  during texture compilation).
 
 -----------------------------------------------------------------------------*/
 
 static void do_loading_screen ()
 {
 
-  float progress;
-  int   radius;
-
-  // Compute combined progress: textures = 0..50%, entities = 50..100%.
-  if (!TextureReady ())
-    progress = TextureProgress () * 0.5f;
-  else
-    progress = 0.5f + EntityProgress () * 0.5f;
+  int now = GetTimeInMillis ();
+  if (!title_tex) {
+    build_title_texture ();
+    loading_start_ms = now;
+  }
 
   // Make sure we're on the default framebuffer, not an FBO.
   if (glBindFramebufferEXT)
@@ -278,8 +389,6 @@ static void do_loading_screen ()
   glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // Set up a clean 2D ortho projection -- completely independent of the
-  // scene projection that RenderUpdate would normally configure.
   glMatrixMode (GL_PROJECTION);
   glPushMatrix ();
   glLoadIdentity ();
@@ -291,21 +400,14 @@ static void do_loading_screen ()
 
   glDisable (GL_DEPTH_TEST);
   glDepthMask (false);
-  glDisable (GL_TEXTURE_2D);
   glDisable (GL_FOG);
   glDisable (GL_CULL_FACE);
-  glDisable (GL_BLEND);
 
-  // Draw the progress widget and text.
-  radius = render_width / 16;
-  do_progress ((float)render_width / 2, (float)render_height / 2,
-               (float)radius, 1.0f, progress);
-  RenderPrint (render_width / 2 - LOGO_PIXELS, render_height / 2 + LOGO_PIXELS,
-               0, glRgba (0.5f), "%1.2f%%", progress * 100.0f);
-  RenderPrint (1, "%s v%d.%d.%03d", APP_TITLE, VERSION_MAJOR, VERSION_MINOR,
-               VERSION_REVISION);
+  float title_alpha = (float)(now - loading_start_ms) / (float)TITLE_FADE_IN_MS;
+  if (title_alpha > 1.0f) title_alpha = 1.0f;
+  if (title_alpha < 0.0f) title_alpha = 0.0f;
+  draw_pixel_title (title_alpha);
 
-  // Restore matrix stacks exactly as we found them.
   glPopMatrix ();
   glMatrixMode (GL_PROJECTION);
   glPopMatrix ();
@@ -1202,6 +1304,46 @@ void RenderUpdate (void)
       glPopMatrix();
       glMatrixMode (GL_MODELVIEW);
       glPopMatrix();
+  }
+
+  // Title-card cross-fade. WorldFade() is 1 while the scene is covered and ramps
+  // to 0 as the city fades in (FADE_IN), so a black veil + the pixellated title,
+  // both at that alpha, dissolve together to reveal the city underneath. This is
+  // what turns the held title card into a cross-fade (and bookends every scene
+  // rebuild). At fade 0 (steady state) nothing here draws.
+  if (LOADING_SCREEN) {
+    float f = WorldFade ();
+    if (f > 0.0f) {
+      glMatrixMode (GL_PROJECTION);
+      glPushMatrix ();
+      glLoadIdentity ();
+      glOrtho (0, render_width, render_height, 0, 0.1f, 2048);
+      glMatrixMode (GL_MODELVIEW);
+      glPushMatrix ();
+      glLoadIdentity ();
+      glTranslatef (0, 0, -1.0f);
+      glDisable (GL_DEPTH_TEST);
+      glDepthMask (false);
+      glDisable (GL_FOG);
+      glDisable (GL_CULL_FACE);
+      glDisable (GL_TEXTURE_2D);
+      glEnable (GL_BLEND);
+      glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glColor4f (0, 0, 0, f);
+      glBegin (GL_QUADS);
+      glVertex2i (0, 0);
+      glVertex2i (0, render_height);
+      glVertex2i (render_width, render_height);
+      glVertex2i (render_width, 0);
+      glEnd ();
+      draw_pixel_title (f);
+      glDepthMask (true);
+      glEnable (GL_DEPTH_TEST);
+      glPopMatrix ();
+      glMatrixMode (GL_PROJECTION);
+      glPopMatrix ();
+      glMatrixMode (GL_MODELVIEW);
+    }
   }
 
   if (generate_icon) {
