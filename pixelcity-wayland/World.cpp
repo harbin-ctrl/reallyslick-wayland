@@ -735,6 +735,11 @@ int WorldSceneElapsed ()
 
 -----------------------------------------------------------------------------*/
 
+static bool first_boot = true;
+bool IsFirstBoot(void) {
+  return first_boot;
+}
+
 void WorldUpdate (void)
 {
 
@@ -754,7 +759,10 @@ void WorldUpdate (void)
         static int  ready_since = 0;
         if (!ready_since)
           ready_since = now;
-        if (now - ready_since >= TITLE_HOLD) {
+        
+        int hold_time = first_boot ? 3000 : 0;
+        
+        if (now - ready_since >= hold_time) {
           fade_state = FADE_IN;
           fade_start = now;
           fade_current = 1.0f;
@@ -773,6 +781,7 @@ void WorldUpdate (void)
         fade_current = 0.0f;
         start_time = time (NULL);
         scene_begin = GetTimeInMillis ();
+        first_boot = false;
       }
     } else {
       fade_current = (float)fade_delta / FADE_TIME;

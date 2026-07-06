@@ -437,10 +437,12 @@ static void do_loading_screen ()
   glDisable (GL_FOG);
   glDisable (GL_CULL_FACE);
 
-  float title_alpha = (float)(now - loading_start_ms) / (float)TITLE_FADE_IN_MS;
-  if (title_alpha > 1.0f) title_alpha = 1.0f;
-  if (title_alpha < 0.0f) title_alpha = 0.0f;
-  draw_pixel_title (title_alpha);
+  if (IsFirstBoot()) {
+    float title_alpha = (float)(now - loading_start_ms) / (float)TITLE_FADE_IN_MS;
+    if (title_alpha > 1.0f) title_alpha = 1.0f;
+    if (title_alpha < 0.0f) title_alpha = 0.0f;
+    draw_pixel_title (title_alpha);
+  }
 
   glPopMatrix ();
   glMatrixMode (GL_PROJECTION);
@@ -1372,11 +1374,13 @@ void RenderUpdate (void)
       // is the fade-in ramp, so a title still fading up when the scene becomes
       // ready keeps rising smoothly instead of popping to full; during the
       // cross-fade (f: 1 -> 0) the ramp is already 1, so it tracks f and fades out.
-      float fin = loading_start_ms
-                ? (float)(GetTimeInMillis () - loading_start_ms) / (float)TITLE_FADE_IN_MS
-                : 1.0f;
-      if (fin > 1.0f) fin = 1.0f;
-      draw_pixel_title (f < fin ? f : fin);
+      if (IsFirstBoot()) {
+        float fin = loading_start_ms
+                  ? (float)(GetTimeInMillis () - loading_start_ms) / (float)TITLE_FADE_IN_MS
+                  : 1.0f;
+        if (fin > 1.0f) fin = 1.0f;
+        draw_pixel_title (f < fin ? f : fin);
+      }
       glDepthMask (true);
       glEnable (GL_DEPTH_TEST);
       glPopMatrix ();
@@ -1416,8 +1420,8 @@ void RenderUpdate (void)
   }
 
   //Framerate tracker
-  if (show_fps && !generate_icon) 
-    RenderPrint (1, "FPS=%d : Scale=%d%% : Entities=%d : polys=%d", current_fps, (int)(render_scale * 100.0f + 0.5f), EntityCount () + LightCount () + CarCount (), EntityPolyCount () + LightCount () + CarCount ());
+  // if (show_fps && !generate_icon) 
+  //  RenderPrint (1, "FPS=%d : Scale=%d%% : Entities=%d : polys=%d", current_fps, (int)(render_scale * 100.0f + 0.5f), EntityCount () + LightCount () + CarCount (), EntityPolyCount () + LightCount () + CarCount ());
   //Show the help overlay
   if (show_help && !generate_icon)
     do_help ();
