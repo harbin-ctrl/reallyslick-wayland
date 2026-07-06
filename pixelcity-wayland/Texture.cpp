@@ -988,7 +988,11 @@ void TextureInit (void)
   new CTexture (TEXTURE_LOGOS, LOGO_RESOLUTION,  true, false, true);
   for (int i = TEXTURE_BUILDING1; i <= TEXTURE_BUILDING9; i++)
     new CTexture (i, 512, true, false, false);
-  new CTexture (TEXTURE_BLOOM,  2048,  true, false, false);
+  // TEXTURE_BLOOM is intentionally not built here. Bloom is now a post-process
+  // shader pass over the main FBO (see RenderUpdate/RenderBloom); the old
+  // fixed-function do_effects() path that sampled this 2048x2048 texture is dead
+  // code. Building it cost ~170ms at startup (a junk DrawWindows() fill plus a
+  // 16MB glCopyTexImage2D + mipmap) for a texture nothing ever samples.
   // int  names = PREFIX_COUNT * NAME_COUNT + SUFFIX_COUNT * NAME_COUNT;
 
 }

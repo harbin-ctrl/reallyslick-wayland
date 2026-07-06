@@ -794,8 +794,15 @@ void WorldInit (void)
   for (int i = 0; i < CARS; i++)
     new CCar ();
   sky = new CSky ();
-  WorldReset ();
-  fade_state = FADE_OUT;
-  fade_start = 0;
+  // Build the city now, before the texture-bake loop starts. Previously WorldInit
+  // left fade_state=FADE_OUT with fade_start=0, so the very first WorldUpdate
+  // instantly "completed" the fade-out and scheduled a reset for frame 2 -- and
+  // that reset's TextureReset() threw away the first texture the bake loop had
+  // already built on frame 1, forcing a redundant rebuild (~100ms wasted every
+  // startup). Doing the reset here and holding in FADE_WAIT lets the bake loop run
+  // once, uninterrupted; the scene still fades in when textures+entities are ready.
+  do_reset ();
+  fade_state = FADE_WAIT;
+  fade_start = GetTimeInMillis ();
 
 }

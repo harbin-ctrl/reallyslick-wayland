@@ -116,6 +116,10 @@ struct cell
 typedef std::vector<entity> ent_list_t;
 
 static cell       cell_list[GRID_SIZE][GRID_SIZE];
+// Per-cell index into entity_list, built once (see build_buckets). Lets
+// do_compile touch only the entities in the cell it is compiling instead of
+// rescanning the entire (sorted) entity_list for every cell and every pass.
+static std::vector<int> cell_bucket[GRID_SIZE][GRID_SIZE];
 static ent_list_t entity_list;
 static bool       sorted;
 static bool       compiled;
@@ -163,10 +167,30 @@ void add (CEntity* b)
 
 -----------------------------------------------------------------------------*/
 
+// Sort each entity into the grid cell its center falls in. Called once, right
+// after entity_list is sorted (which groups by texture for batching). Because
+// we walk the already-sorted list in order, every bucket inherits that texture
+// grouping for free. This replaces the old do_compile scheme where every one of
+// the six display-list passes rescanned the ENTIRE entity_list for every cell
+// (GRID_SIZE^2 * 6 * N Center() calls) -- an O(cells * entities) blowup.
+static void build_buckets ()
+{
+  for (int gx = 0; gx < GRID_SIZE; gx++)
+    for (int gy = 0; gy < GRID_SIZE; gy++)
+      cell_bucket[gx][gy].clear ();
+
+  for (int idx = 0; idx < (int)entity_list.size (); idx++) {
+    GLvector pos = entity_list[idx]->Center ();
+    int gx = WORLD_TO_GRID(pos.x);
+    int gy = WORLD_TO_GRID(pos.z);
+    if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE)
+      cell_bucket[gx][gy].push_back (idx);
+  }
+}
+
 static void do_compile ()
 {
 
-  ent_list_t::iterator i;
   int                x, y;
 
   if (compiled)
@@ -174,33 +198,34 @@ static void do_compile ()
   x = compile_x;
   y = compile_y;
   //Changing textures is pretty expensive, and thus sorting the entites so that
-  //they are grouped by texture used can really improve framerate.
-  //qsort (entity_list, entity_count, sizeof (struct entity), do_compare);
-  //sorted = true;
-  //Now group entites on the grid 
+  //they are grouped by texture used can really improve framerate. The sort
+  //happens once in EntityUpdate; build_buckets() then groups the sorted entities
+  //by grid cell so each pass below only touches this cell's own entities.
+  const std::vector<int>& bucket = cell_bucket[x][y];
+  cell_list[x][y].pos = glVector (GRID_TO_WORLD(x), 0.0f, (float)y * GRID_RESOLUTION);
+
   //make a list for the textured objects in this region
   if (!cell_list[x][y].list_textured)
     cell_list[x][y].list_textured = glGenLists(1);
   glNewList (cell_list[x][y].list_textured, GL_COMPILE);
-  cell_list[x][y].pos = glVector (GRID_TO_WORLD(x), 0.0f, (float)y * GRID_RESOLUTION);
-  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
-    GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && !(*i)->Alpha ()) {
-      glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
-      (*i)->Render ();
+  for (int idx : bucket) {
+    entity& e = entity_list[idx];
+    if (!e->Alpha ()) {
+      glBindTexture(GL_TEXTURE_2D, e->Texture ());
+      e->Render ();
     }
   }
-  glEndList();	
+  glEndList();
 
   // LOD list for distant rendering
   if (!cell_list[x][y].list_textured_lod)
     cell_list[x][y].list_textured_lod = glGenLists(1);
   glNewList (cell_list[x][y].list_textured_lod, GL_COMPILE);
-  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
-    GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && !(*i)->Alpha ()) {
-      glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
-      (*i)->RenderLOD ();
+  for (int idx : bucket) {
+    entity& e = entity_list[idx];
+    if (!e->Alpha ()) {
+      glBindTexture(GL_TEXTURE_2D, e->Texture ());
+      e->RenderLOD ();
     }
   }
   glEndList();
@@ -210,27 +235,23 @@ static void do_compile ()
     cell_list[x][y].list_flat = glGenLists(1);
   glNewList (cell_list[x][y].list_flat, GL_COMPILE);
   glEnable (GL_CULL_FACE);
-  cell_list[x][y].pos = glVector (GRID_TO_WORLD(x), 0.0f, (float)y * GRID_RESOLUTION);
-  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
-    GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && !(*i)->Alpha ()) {
-      (*i)->RenderFlat (false);
-    }
+  for (int idx : bucket) {
+    entity& e = entity_list[idx];
+    if (!e->Alpha ())
+      e->RenderFlat (false);
   }
-  glEndList();	
+  glEndList();
   //Now a list of flat-colored stuff that will be wireframe friendly
   if (!cell_list[x][y].list_flat_wireframe)
     cell_list[x][y].list_flat_wireframe = glGenLists(1);
   glNewList (cell_list[x][y].list_flat_wireframe, GL_COMPILE);
   glEnable (GL_CULL_FACE);
-  cell_list[x][y].pos = glVector (GRID_TO_WORLD(x), 0.0f, (float)y * GRID_RESOLUTION);
-  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
-    GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && !(*i)->Alpha ()) {
-      (*i)->RenderFlat (true);
-    }
+  for (int idx : bucket) {
+    entity& e = entity_list[idx];
+    if (!e->Alpha ())
+      e->RenderFlat (true);
   }
-  glEndList();	
+  glEndList();
   //Now a list of stuff to be alpha-blended, and thus rendered last. Building
   //signs (TEXTURE_LOGOS) are pulled into their own list so they can be drawn at
   //full distance -- there are only a handful and they are the landmark the user
@@ -240,16 +261,14 @@ static void do_compile ()
   if (!cell_list[x][y].list_alpha)
     cell_list[x][y].list_alpha = glGenLists(1);
   glNewList (cell_list[x][y].list_alpha, GL_COMPILE);
-  cell_list[x][y].pos = glVector (GRID_TO_WORLD(x), 0.0f, (float)y * GRID_RESOLUTION);
   glDepthMask (false);
   glEnable (GL_BLEND);
   glDisable (GL_CULL_FACE);
-  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
-    GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && (*i)->Alpha () &&
-        (*i)->Texture () != logo_tex) {
-      glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
-      (*i)->Render ();
+  for (int idx : bucket) {
+    entity& e = entity_list[idx];
+    if (e->Alpha () && e->Texture () != logo_tex) {
+      glBindTexture(GL_TEXTURE_2D, e->Texture ());
+      e->Render ();
     }
   }
   glDepthMask (true);
@@ -262,12 +281,11 @@ static void do_compile ()
   glDepthMask (false);
   glEnable (GL_BLEND);
   glDisable (GL_CULL_FACE);
-  for (i = entity_list.begin(); i < entity_list.end(); ++i) {
-    GLvector pos = (*i)->Center ();
-    if (WORLD_TO_GRID(pos.x) == x && WORLD_TO_GRID(pos.z) == y && (*i)->Alpha () &&
-        (*i)->Texture () == logo_tex) {
-      glBindTexture(GL_TEXTURE_2D, (*i)->Texture ());
-      (*i)->Render ();
+  for (int idx : bucket) {
+    entity& e = entity_list[idx];
+    if (e->Alpha () && e->Texture () == logo_tex) {
+      glBindTexture(GL_TEXTURE_2D, e->Texture ());
+      e->Render ();
     }
   }
   glDepthMask (true);
@@ -325,6 +343,7 @@ void EntityUpdate ()
   } 
   if (!sorted) {
     std::sort (entity_list.begin(), entity_list.end());
+    build_buckets ();
     sorted = true;
   }
   //We want to do several cells at once. Enough to get things done, but
