@@ -10,3 +10,4 @@ xdg-shell-client-protocol.h
 xdg-shell-protocol.c
 xdg-decoration-unstable-v1-client-protocol.h
 xdg-decoration-unstable-v1-protocol.c
+userinstall
