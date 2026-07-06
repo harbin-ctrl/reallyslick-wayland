@@ -1,6 +1,0 @@
-
-[Desktop Entry]
-Name=Roman Boy
-Exec=/usr/libexec/xscreensaver/romanboy --root
-TryExec=/usr/libexec/xscreensaver/romanboy
-Comment=A 3D immersion of the real projective plane that smoothly deforms between the Roman surface and the Boy surface. You can walk on the surface of the real projective plane or rotate it in 3D. Furthermore, it is possible to smoothly deform the real projective plane between the Roman surface and the Boy surface while turning it or walking on it. Inspired by François Apéry's book "Models of the Real Projective Plane", Vieweg, 1987. https://en.wikipedia.org/wiki/Boy%27s_surface https://en.wikipedia.org/wiki/Roman_surface Written by Carsten Steger.

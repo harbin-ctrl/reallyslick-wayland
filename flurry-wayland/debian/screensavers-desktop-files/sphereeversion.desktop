@@ -1,6 +1,0 @@
-
-[Desktop Entry]
-Name=Sphere Eversion
-Exec=/usr/libexec/xscreensaver/sphereeversion --root
-TryExec=/usr/libexec/xscreensaver/sphereeversion
-Comment=Turns a sphere inside out: a smooth deformation (homotopy). During the eversion, the deformed sphere is allowed to intersect itself transversally, however, no creases or pinch points occur. Inspired by the following paper: Adam Bednorz, Witold Bednorz: "Analytic sphere eversion using ruled surfaces", Differential Geometry and its Applications 64:59-79, 2019. Also by the video "Outside In" by The Geometry Center (Bill Thurston, Silvio Levy, Delle Maxwell, Tamara Munzner, Nathaniel Thurston, David Ben-Zvi, Matt Headrick, et al.), 1994, and the accompanying booklet Silvio Levy: "Making Waves — A Guide to the Ideas Behind Outside In", A K Peters, Wellesley, MA, 1995. https://en.wikipedia.org/wiki/Sphere_eversion Written by Carsten Steger.
