@@ -405,7 +405,7 @@ int main (int argc, char** argv)
   xdg_surface_add_listener (xsurface, &xsurface_listener, NULL);
   toplevel = xdg_surface_get_toplevel (xsurface);
   xdg_toplevel_add_listener (toplevel, &toplevel_listener, NULL);
-  xdg_toplevel_set_title (toplevel, "Pixel City");
+  xdg_toplevel_set_title (toplevel, "PixelCity");
   xdg_toplevel_set_app_id (toplevel, "pixelcity");
   // Ask the compositor to draw the window decorations (title bar, borders).
   // Without this, xdg-shell surfaces come up undecorated unless the client
