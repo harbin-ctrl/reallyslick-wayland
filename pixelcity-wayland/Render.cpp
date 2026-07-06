@@ -268,7 +268,7 @@ static void do_progress (float center_x, float center_y, float radius, float opa
 #define TITLE_TEXT        "PixelCity"
 #define TITLE_FONT        0            // Anton-Regular: ultra-heavy grotesque
 #define TITLE_FADE_IN_MS  900          // title ramps up from black over ~0.9s
-#define TITLE_DOWNSAMPLE  4            // font pixels collapsed into one grid cell
+#define TITLE_DOWNSAMPLE  2            // font pixels collapsed into one grid cell
 #define TITLE_GRID_MAX_W  256
 #define TITLE_GRID_MAX_H  96
 #define TITLE_BLOCK_FRAC  0.8f         // white block = 4/5 of the cell pitch (4:1)
