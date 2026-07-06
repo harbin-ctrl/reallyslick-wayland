@@ -254,20 +254,27 @@ static void do_progress (float center_x, float center_y, float radius, float opa
 
   Pixellated "PixelCity" title card.
 
-  The bitmap fonts are fixed-size (glBitmap can't be scaled), so we render the
-  title once at its native pixel size into a texture, then draw it as a big
-  centred quad with GL_NEAREST filtering -- every font pixel becomes a chunky
-  block. On-theme for *Pixel* City, and it serves triple duty: the loading
-  screen, the initial fade-in, and the cross-fade transition into the city.
+  Rendered as an explicit pixel grid so the blockiness reads as deliberate (it's
+  *Pixel* City, after all): each cell is a white square with a 1-unit black gap
+  on two sides -- a block:gap ratio of 4:1 -- like an LED sign. We rasterise the
+  word once via the normal font, read it back, and collapse it to a coarse
+  lit/unlit grid; draw_pixel_title then paints one square per lit cell.
+
+  It serves triple duty: the loading screen, the initial fade-in, and the
+  cross-fade into the city.
 
 -----------------------------------------------------------------------------*/
 
 #define TITLE_TEXT        "PixelCity"
 #define TITLE_FONT        0            // Anton-Regular: ultra-heavy grotesque
 #define TITLE_FADE_IN_MS  900          // title ramps up from black over ~0.9s
+#define TITLE_DOWNSAMPLE  4            // font pixels collapsed into one grid cell
+#define TITLE_GRID_MAX_W  256
+#define TITLE_GRID_MAX_H  96
+#define TITLE_BLOCK_FRAC  0.8f         // white block = 4/5 of the cell pitch (4:1)
 
-static GLuint   title_tex = 0;
-static int      title_w = 0, title_h = 0;
+static unsigned char title_grid[TITLE_GRID_MAX_H][TITLE_GRID_MAX_W]; // 1 = lit cell
+static int      title_gw = 0, title_gh = 0;   // grid dims, trimmed to the ink
 static int      loading_start_ms = 0;
 
 // Native pixel width of a string in the given baked font (sum of pen advances).
@@ -283,84 +290,109 @@ static int title_text_width (int font, const char* s)
   return w;
 }
 
-// Render TITLE_TEXT white-on-black once, at the font's native size, and capture
-// it from the bottom-left of the default framebuffer into title_tex (NEAREST so
-// it stays crisp/blocky when scaled up).
-static void build_title_texture ()
+// Rasterise TITLE_TEXT once via the font, read it back, and collapse it to a
+// coarse lit/unlit cell grid (trimmed to the ink's bounding box).
+static void build_title_grid ()
 {
-  title_w = MIN (title_text_width (TITLE_FONT, TITLE_TEXT), render_width);
-  title_h = MIN (FONT_SIZE + FONT_SIZE / 2, render_height);  // room for caps + 'y' tail
+  int W = MIN (title_text_width (TITLE_FONT, TITLE_TEXT), render_width);
+  int H = MIN (FONT_SIZE + FONT_SIZE / 2, render_height);  // caps + 'y' descender
+  if (W < TITLE_DOWNSAMPLE || H < TITLE_DOWNSAMPLE)
+    return;
 
   if (glBindFramebufferEXT)
     glBindFramebufferEXT (GL_FRAMEBUFFER, 0);
   glViewport (0, 0, render_width, render_height);
-  glMatrixMode (GL_PROJECTION);
-  glPushMatrix ();
-  glLoadIdentity ();
+  glMatrixMode (GL_PROJECTION); glPushMatrix (); glLoadIdentity ();
   glOrtho (0, render_width, render_height, 0, 0.1f, 2048);
-  glMatrixMode (GL_MODELVIEW);
-  glPushMatrix ();
-  glLoadIdentity ();
+  glMatrixMode (GL_MODELVIEW); glPushMatrix (); glLoadIdentity ();
   glTranslatef (0, 0, -1.0f);
-  glDisable (GL_DEPTH_TEST);
-  glDepthMask (false);
-  glDisable (GL_BLEND);
-  glDisable (GL_TEXTURE_2D);
-  glDisable (GL_FOG);
+  glDisable (GL_DEPTH_TEST); glDepthMask (false);
+  glDisable (GL_BLEND); glDisable (GL_TEXTURE_2D); glDisable (GL_FOG);
   glClearColor (0, 0, 0, 1);
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // Baseline sits a little above the bottom edge so the whole glyph (including
-  // the 'y' descender) lands in framebuffer rows [0 .. title_h].
+  // Baseline a little above the bottom edge so the whole glyph (incl. the 'y'
+  // descender) lands in framebuffer rows [0 .. H].
   RenderPrint (0, render_height - FONT_SIZE / 3, TITLE_FONT, glRgba (1.0f), TITLE_TEXT);
 
-  if (!title_tex)
-    glGenTextures (1, &title_tex);
-  glBindTexture (GL_TEXTURE_2D, title_tex);
-  glCopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, 0, 0, title_w, title_h, 0);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glBindTexture (GL_TEXTURE_2D, 0);
+  unsigned char* px = (unsigned char*) malloc ((size_t)W * H * 4);
+  if (px) {
+    glPixelStorei (GL_PACK_ALIGNMENT, 1);
+    glReadPixels (0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, px);
 
-  glPopMatrix ();
-  glMatrixMode (GL_PROJECTION);
-  glPopMatrix ();
-  glMatrixMode (GL_MODELVIEW);
-  glDepthMask (true);
+    int full_gw = MIN (W / TITLE_DOWNSAMPLE, TITLE_GRID_MAX_W);
+    int full_gh = MIN (H / TITLE_DOWNSAMPLE, TITLE_GRID_MAX_H);
+    int minx = full_gw, miny = full_gh, maxx = -1, maxy = -1;
+    // A cell lights if enough of its source block is ink. glReadPixels is
+    // bottom-up, so flip rows to put grid row 0 at the top of the letters.
+    for (int cy = 0; cy < full_gh; cy++)
+      for (int cx = 0; cx < full_gw; cx++) {
+        int lit = 0, total = 0;
+        for (int dy = 0; dy < TITLE_DOWNSAMPLE; dy++)
+          for (int dx = 0; dx < TITLE_DOWNSAMPLE; dx++) {
+            int sx = cx * TITLE_DOWNSAMPLE + dx, sy = cy * TITLE_DOWNSAMPLE + dy;
+            if (sx >= W || sy >= H) continue;
+            total++;
+            if (px[((size_t)sy * W + sx) * 4] > 96) lit++;   // red channel
+          }
+        int on = (total && lit * 100 / total >= 35);
+        int gy = full_gh - 1 - cy;                            // flip
+        title_grid[gy][cx] = (unsigned char) on;
+        if (on) {
+          if (cx < minx) minx = cx;  if (cx > maxx) maxx = cx;
+          if (gy < miny) miny = gy;  if (gy > maxy) maxy = gy;
+        }
+      }
+    free (px);
+
+    // Trim to the ink so the title centres and sizes on the letters, not the
+    // empty margins. Reads run ahead of writes (min* >= 0), so this is safe.
+    if (maxx >= minx && maxy >= miny) {
+      int tw = maxx - minx + 1, th = maxy - miny + 1;
+      for (int y = 0; y < th; y++)
+        for (int x = 0; x < tw; x++)
+          title_grid[y][x] = title_grid[y + miny][x + minx];
+      title_gw = tw;
+      title_gh = th;
+    }
+  }
+
+  glPopMatrix (); glMatrixMode (GL_PROJECTION); glPopMatrix ();
+  glMatrixMode (GL_MODELVIEW); glDepthMask (true);
 }
 
-// Draw the title centred and scaled up with nearest-neighbour, additively so the
-// black texels contribute nothing (no visible box) and only the letters show --
-// which also lets it sit seamlessly over a black veil during the cross-fade.
-// Assumes a 2D ortho (0,W,H,0) is already active. alpha 0..1.
+// Paint the title, centred, as a grid of white squares with black gaps (4:1),
+// additively so the gaps add nothing -- crisp deliberate pixels on the black
+// card, and seamless over the veil during the cross-fade. alpha 0..1. Assumes a
+// 2D ortho (0,W,H,0) is already active.
 static void draw_pixel_title (float alpha)
 {
-  if (!title_tex || alpha <= 0.0f)
+  if (!title_gw || alpha <= 0.0f)
     return;
 
-  // Span ~55% of the width, but never taller than ~30% of the height.
-  float scale = (0.55f * render_width) / (float)title_w;
-  if (title_h * scale > 0.30f * render_height)
-    scale = (0.30f * render_height) / (float)title_h;
-  float w = title_w * scale;
-  float h = title_h * scale;
-  float l = render_width  / 2.0f - w / 2.0f, r = l + w;
-  float t = render_height / 2.0f - h / 2.0f, b = t + h;
+  // Fit ~60% of the width, but never taller than ~34% of the height.
+  float pitch = (0.60f * render_width) / (float)title_gw;
+  if (pitch * title_gh > 0.34f * render_height)
+    pitch = (0.34f * render_height) / (float)title_gh;
+  float block = pitch * TITLE_BLOCK_FRAC;
+  float ox = render_width  / 2.0f - pitch * title_gw / 2.0f;
+  float oy = render_height / 2.0f - pitch * title_gh / 2.0f;
 
-  glEnable (GL_TEXTURE_2D);
-  glBindTexture (GL_TEXTURE_2D, title_tex);
+  glDisable (GL_TEXTURE_2D);
   glEnable (GL_BLEND);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE);           // additive
+  glBlendFunc (GL_SRC_ALPHA, GL_ONE);           // additive: black gaps add nothing
   glColor4f (1, 1, 1, alpha);
-  glBegin (GL_QUADS);                            // texture is bottom-up: v=1 at top
-  glTexCoord2f (0, 1); glVertex2f (l, t);
-  glTexCoord2f (0, 0); glVertex2f (l, b);
-  glTexCoord2f (1, 0); glVertex2f (r, b);
-  glTexCoord2f (1, 1); glVertex2f (r, t);
+  glBegin (GL_QUADS);
+  for (int gy = 0; gy < title_gh; gy++)
+    for (int gx = 0; gx < title_gw; gx++)
+      if (title_grid[gy][gx]) {
+        float x = ox + gx * pitch, y = oy + gy * pitch;
+        glVertex2f (x,         y);
+        glVertex2f (x,         y + block);
+        glVertex2f (x + block, y + block);
+        glVertex2f (x + block, y);
+      }
   glEnd ();
-  glBindTexture (GL_TEXTURE_2D, 0);
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
@@ -376,8 +408,8 @@ static void do_loading_screen ()
 {
 
   int now = GetTimeInMillis ();
-  if (!title_tex) {
-    build_title_texture ();
+  if (!title_gw) {
+    build_title_grid ();
     loading_start_ms = now;
   }
 
