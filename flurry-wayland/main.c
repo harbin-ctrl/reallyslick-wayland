@@ -7,7 +7,10 @@
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include <EGL/egl.h>
+
+#define GL_GLEXT_PROTOTYPES 1
 #include <GL/gl.h>
+#include <GL/glu.h>
 #include <linux/input.h>
 
 #include "xdg-shell-client-protocol.h"
@@ -184,6 +187,41 @@ static void xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel) {
 static void toplevel_decoration_configure(void *data, struct zxdg_toplevel_decoration_v1 *decoration, uint32_t mode) {
 }
 
+GLuint fbo = 0;
+GLuint fbo_texture = 0;
+
+static void init_fbo(int width, int height) {
+    if (fbo) {
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &fbo_texture);
+        fbo = 0;
+        fbo_texture = 0;
+    }
+    
+    glGenTextures(1, &fbo_texture);
+    glBindTexture(GL_TEXTURE_2D, fbo_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_texture, 0);
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        fprintf(stderr, "FBO initialization failed: 0x%x\n", status);
+    }
+    
+    // Clear FBO initially to black
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 int main(int argc, char **argv) {
     if (argc > 1) {
         preset_str = argv[1];
@@ -267,18 +305,20 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+
+
     if (!eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context)) {
         fprintf(stderr, "Failed to make EGL context current\n");
         return -1;
     }
 
-    // Initialize flurry simulation
     ModeInfo mi = {
         .width = window_width,
         .height = window_height,
         .screen = 0
     };
 
+    init_fbo(window_width, window_height);
     init_flurry(&mi);
 
     while (running) {
@@ -289,15 +329,58 @@ int main(int argc, char **argv) {
             mi.width = window_width;
             mi.height = window_height;
             reshape_flurry(&mi, window_width, window_height);
+            init_fbo(window_width, window_height);
             size_changed = false;
         }
 
+        // Render flurry into FBO
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         draw_flurry(&mi);
+
+        // Blit FBO to screen
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, window_width, window_height);
+
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0, 1, 0, 1, -1, 1);
+        
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
+
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, fbo_texture);
+        glDisable(GL_BLEND);
+
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 0.0f);
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(1.0f, 0.0f);
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(1.0f, 1.0f);
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 1.0f);
+        glEnd();
+
+        glDisable(GL_TEXTURE_2D);
+
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
+
         eglSwapBuffers(egl_display, egl_surface);
     }
 
-    // Cleanup
     free_flurry(&mi);
+
+    if (fbo) {
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &fbo_texture);
+    }
 
     eglDestroySurface(egl_display, egl_surface);
     wl_egl_window_destroy(egl_window);

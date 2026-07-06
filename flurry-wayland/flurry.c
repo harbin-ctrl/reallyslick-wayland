@@ -482,7 +482,7 @@ draw_flurry(ModeInfo * mi)
 	global->texid = MakeTexture();
 	global->first = 0;
     }
-    glDrawBuffer(GL_BACK);
+
 
     glViewport(0, 0, (GLint)global->sys_glWidth, (GLint)global->sys_glHeight);
     glMatrixMode(GL_PROJECTION);
