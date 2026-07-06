@@ -7,12 +7,14 @@
 #define TRIM_ROWS             4
 #define TRIM_SIZE             (1.0f / TRIM_ROWS)
 #define TRIM_PIXELS           (TRIM_RESOLUTION / TRIM_ROWS)
-// 4096 is this GPU's GL_MAX_TEXTURE_SIZE ceiling (confirmed at runtime); kept at
-// 64px/sign (same as before) so legibility doesn't shrink as rows go up. That's
-// ~64MB of texture (was ~4MB at 1024/16) -- a one-time load-time/VRAM cost, not
-// a per-frame fillrate cost (signs are a handful of small quads, not full-screen).
-#define LOGO_RESOLUTION       4096
-#define LOGO_ROWS             64
+// 2048 with 32 rows keeps 64px/sign (LOGO_PIXELS unchanged, so FONT_SIZE and the
+// baked glyphs are untouched -- signs and HUD stay exactly as sharp). Baking the
+// atlas at 4096 cost ~700ms at startup (a 64MB glCopyTexImage2D + mipmap); 2048
+// is ~190ms, ~505ms faster, for ~16MB of VRAM. The only trade is sign variety:
+// 32 distinct building names per city instead of 64. Bumping either value back
+// to 4096/64 restores the extra variety at that load-time cost.
+#define LOGO_RESOLUTION       2048
+#define LOGO_ROWS             32
 #define LOGO_SIZE             (1.0f / LOGO_ROWS)
 #define LOGO_PIXELS           (LOGO_RESOLUTION / LOGO_ROWS)
 
