@@ -309,6 +309,8 @@ void GLResize(global_info_t *global, float w, float h)
 }
 
 /* new window size or exposure */
+static void init_flurry_streams(global_info_t *global);
+
 ENTRYPOINT void reshape_flurry(ModeInfo *mi, int width, int height)
 {
     global_info_t *global = flurry_info + MI_SCREEN(mi);
@@ -324,14 +326,28 @@ ENTRYPOINT void reshape_flurry(ModeInfo *mi, int width, int height)
     glClear(GL_COLOR_BUFFER_BIT);
     glFlush();
     GLResize(global, (float)width, (float)height);
+
+    if (global->flurry && !global->first) {
+        flurry_info_t *flurry = global->flurry;
+        while (flurry) {
+            flurry_info_t *next = flurry->next;
+            delete_flurry_info(flurry);
+            free(flurry);
+            flurry = next;
+        }
+        global->flurry = NULL;
+
+        init_flurry_streams(global);
+
+        global->oldFrameTime = -1;
+    }
 }
 
-ENTRYPOINT void
-init_flurry(ModeInfo * mi)
+static void
+init_flurry_streams(global_info_t *global)
 {
-    int screen = MI_SCREEN(mi);
     int i;
-    global_info_t *global;
+    int preset_num;
     enum {
 	PRESET_INSANE = -1,
         PRESET_WATER = 0,
@@ -341,17 +357,7 @@ init_flurry(ModeInfo * mi)
         PRESET_BINARY,
         PRESET_CLASSIC,
         PRESET_MAX
-    } preset_num;
-
-    MI_INIT (mi, flurry_info);
-
-    global = &flurry_info[screen];
-
-    global->gTimeCounter = currentTime();
-
-    global->window = MI_WINDOW(mi);
-
-    global->flurry = NULL;
+    };
 
     if (!preset_str || !*preset_str) preset_str = DEF_PRESET;
     if (!strcmp(preset_str, "random")) {
@@ -451,7 +457,26 @@ init_flurry(ModeInfo * mi)
         fprintf(stderr, "%s: unknown preset %s\n", progname, preset_str);
         exit(1);
     }
-    } 
+    }
+}
+
+ENTRYPOINT void
+init_flurry(ModeInfo * mi)
+{
+    int screen = MI_SCREEN(mi);
+    global_info_t *global;
+
+    MI_INIT (mi, flurry_info);
+
+    global = &flurry_info[screen];
+
+    global->gTimeCounter = currentTime();
+
+    global->window = MI_WINDOW(mi);
+
+    global->flurry = NULL;
+
+    init_flurry_streams(global);
 
     if ((global->glx_context = init_GL(mi)) != NULL) {
 	reshape_flurry(mi, MI_WIDTH(mi), MI_HEIGHT(mi));
