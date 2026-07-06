@@ -353,6 +353,10 @@ int main(int argc, char **argv) {
         glPushMatrix();
         glLoadIdentity();
 
+        glDisableClientState(GL_VERTEX_ARRAY);
+        glDisableClientState(GL_COLOR_ARRAY);
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, fbo_texture);
         glDisable(GL_BLEND);
@@ -367,6 +371,10 @@ int main(int argc, char **argv) {
 
         glDisable(GL_TEXTURE_2D);
 
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        
         glMatrixMode(GL_PROJECTION);
         glPopMatrix();
         glMatrixMode(GL_MODELVIEW);
