@@ -194,7 +194,7 @@ void GLRenderScene(global_info_t *global, flurry_info_t *flurry, double b)
     flurry->dframe++;
 
     flurry->fOldTime = flurry->fTime;
-    flurry->fTime = TimeInSecondsSinceStart(global) + flurry->flurryRandomSeed;
+    flurry->fTime = (global->oldFrameTime - global->gTimeCounter) + flurry->flurryRandomSeed;
     flurry->fDeltaTime = flurry->fTime - flurry->fOldTime;
 
     flurry->drag = powf(0.9965f, (float)(flurry->fDeltaTime * 85.0));
@@ -466,19 +466,17 @@ draw_flurry(ModeInfo * mi)
 
     newFrameTime = currentTime();
     if (global->oldFrameTime == -1) {
-	/* special case the first frame -- clear to black */
-	alpha = 1.0;
+        alpha = 1.0f;
+        deltaFrameTime = 1.0f / 60.0f;
     } else {
-	if (newFrameTime - global->oldFrameTime < 1/60.0) {
-	    usleep(MAX_(1,(int)(20000 * (newFrameTime - global->oldFrameTime))));
-	    return;
-	}
-	deltaFrameTime = newFrameTime - global->oldFrameTime;
-	alpha = 5.0 * deltaFrameTime;
+        deltaFrameTime = newFrameTime - global->oldFrameTime;
+        if (deltaFrameTime < 0.005) deltaFrameTime = 0.005;
+        if (deltaFrameTime > 0.1) deltaFrameTime = 0.1;
+        alpha = 5.0f * (float)deltaFrameTime;
     }
     global->oldFrameTime = newFrameTime;
 
-    if (alpha > 0.2) alpha = 0.2;
+    if (alpha > 0.2f) alpha = 0.2f;
 
     if (global->first) {
 	global->texid = MakeTexture();

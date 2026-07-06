@@ -62,7 +62,6 @@ void UpdateSmoke_ScalarBase(global_info_t *global, flurry_info_t *flurry, SmokeV
     float sx = flurry->star->position[0];
     float sy = flurry->star->position[1];
     float sz = flurry->star->position[2];
-    double frameRate;
     double frameRateModifier;
 
 
@@ -137,8 +136,7 @@ void UpdateSmoke_ScalarBase(global_info_t *global, flurry_info_t *flurry, SmokeV
         s->old[i] = flurry->star->position[i];
     }
     
-    frameRate = ((double) flurry->dframe)/(flurry->fTime);
-    frameRateModifier = 42.5f / frameRate;
+    frameRateModifier = 42.5f * (float)flurry->fDeltaTime;
 
     for(i=0;i<NUMSMOKEPARTICLES/4;i++) {        
         for(k=0; k<4; k++) {
