@@ -11,6 +11,7 @@
 #include <linux/input.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "flurry.h"
 
 // Forward Declarations
@@ -19,6 +20,7 @@ static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface, u
 static void xdg_toplevel_configure(void *data, struct xdg_toplevel *xdg_toplevel,
                                    int32_t width, int32_t height, struct wl_array *states);
 static void xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel);
+static void toplevel_decoration_configure(void *data, struct zxdg_toplevel_decoration_v1 *decoration, uint32_t mode);
 
 static const struct xdg_wm_base_listener xdg_wm_base_listener = {
     .ping = xdg_wm_base_ping,
@@ -33,6 +35,10 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     .close = xdg_toplevel_close,
 };
 
+static const struct zxdg_toplevel_decoration_v1_listener toplevel_decoration_listener = {
+    .configure = toplevel_decoration_configure,
+};
+
 // Globals
 struct wl_display *display = NULL;
 struct wl_registry *registry = NULL;
@@ -45,6 +51,8 @@ struct wl_surface *surface = NULL;
 struct xdg_surface *x_surface = NULL;
 struct xdg_toplevel *xdg_toplevel = NULL;
 struct wl_egl_window *egl_window = NULL;
+struct zxdg_decoration_manager_v1 *decoration_manager = NULL;
+struct zxdg_toplevel_decoration_v1 *toplevel_decoration = NULL;
 
 EGLDisplay egl_display = EGL_NO_DISPLAY;
 EGLConfig egl_config;
@@ -137,6 +145,8 @@ static void registry_global(void *data, struct wl_registry *wl_registry,
     } else if (strcmp(interface, wl_seat_interface.name) == 0) {
         seat = wl_registry_bind(wl_registry, name, &wl_seat_interface, 7);
         wl_seat_add_listener(seat, &seat_listener, NULL);
+    } else if (strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
+        decoration_manager = wl_registry_bind(wl_registry, name, &zxdg_decoration_manager_v1_interface, 1);
     }
 }
 
@@ -169,6 +179,9 @@ static void xdg_toplevel_configure(void *data, struct xdg_toplevel *xdg_toplevel
 
 static void xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel) {
     running = false;
+}
+
+static void toplevel_decoration_configure(void *data, struct zxdg_toplevel_decoration_v1 *decoration, uint32_t mode) {
 }
 
 int main(int argc, char **argv) {
@@ -209,7 +222,7 @@ int main(int argc, char **argv) {
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
+        EGL_ALPHA_SIZE, 0,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
         EGL_NONE
     };
@@ -236,6 +249,12 @@ int main(int argc, char **argv) {
     xdg_toplevel = xdg_surface_get_toplevel(x_surface);
     xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
     xdg_toplevel_set_title(xdg_toplevel, "Flurry (Wayland)");
+
+    if (decoration_manager) {
+        toplevel_decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(decoration_manager, xdg_toplevel);
+        zxdg_toplevel_decoration_v1_add_listener(toplevel_decoration, &toplevel_decoration_listener, NULL);
+        zxdg_toplevel_decoration_v1_set_mode(toplevel_decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+    }
 
     // Commit and roundtrip to initialize configure
     wl_surface_commit(surface);
@@ -282,9 +301,11 @@ int main(int argc, char **argv) {
 
     eglDestroySurface(egl_display, egl_surface);
     wl_egl_window_destroy(egl_window);
+    if (toplevel_decoration) zxdg_toplevel_decoration_v1_destroy(toplevel_decoration);
     xdg_toplevel_destroy(xdg_toplevel);
     xdg_surface_destroy(x_surface);
     wl_surface_destroy(surface);
+    if (decoration_manager) zxdg_decoration_manager_v1_destroy(decoration_manager);
 
     eglDestroyContext(egl_display, egl_context);
     eglTerminate(egl_display);
