@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Fireworkx
+Exec=/usr/libexec/xscreensaver/fireworkx --root
+TryExec=/usr/libexec/xscreensaver/fireworkx
+Comment=Exploding fireworks. See also the "Eruption", "XFlame" and "Pyro" screen savers. Written by Rony B Chandran.

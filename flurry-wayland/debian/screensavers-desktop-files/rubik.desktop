@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Rubik
+Exec=/usr/libexec/xscreensaver/rubik --root
+TryExec=/usr/libexec/xscreensaver/rubik
+Comment=A Rubik's Cube that repeatedly shuffles and solves itself. See also the "GLSnake" and "Cube21" screen savers. https://en.wikipedia.org/wiki/Rubik%27s_Cube Written by Marcelo Vianna.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Sky Tentacles
+Exec=/usr/libexec/xscreensaver/skytentacles --root
+TryExec=/usr/libexec/xscreensaver/skytentacles
+Comment=There is a tentacled abomination in the sky. From above you it devours. Written by Jamie Zawinski.

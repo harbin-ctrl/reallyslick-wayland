@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL School
+Exec=/usr/libexec/xscreensaver/glschool --root
+TryExec=/usr/libexec/xscreensaver/glschool
+Comment=A school of fish, using the classic "Boids" algorithm by Craig Reynolds. https://en.wikipedia.org/wiki/Boids Written by David C. Lambert and Jamie Zawinski.

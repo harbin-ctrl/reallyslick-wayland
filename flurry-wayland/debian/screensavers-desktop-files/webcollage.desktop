@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Web Collage
+Exec=/usr/libexec/xscreensaver/webcollage --root
+TryExec=/usr/libexec/xscreensaver/webcollage
+Comment=This is what the Internet looks like. This creates collages out of random images from the World Wide Web. It finds the images by feeding random words into various search engines, and pulling images (or sections of images) out of the pages returned. WARNING: THE INTERNET SOMETIMES CONTAINS PORNOGRAPHY. The Internet being what it is, absolutely anything might show up in the collage including -- quite possibly -- pornography, or even nudity. Please act accordingly. See also https://www.jwz.org/webcollage/ Written by Jamie Zawinski.

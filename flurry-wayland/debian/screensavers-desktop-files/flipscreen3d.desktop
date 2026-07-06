@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Flip Screen 3D
+Exec=/usr/libexec/xscreensaver/flipscreen3d --root
+TryExec=/usr/libexec/xscreensaver/flipscreen3d
+Comment=Spins and deforms an image. Written by Ben Buxton and Jamie Zawinski.

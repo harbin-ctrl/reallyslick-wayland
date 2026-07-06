@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Flame
+Exec=/usr/libexec/xscreensaver/flame --root
+TryExec=/usr/libexec/xscreensaver/flame
+Comment=Iterative fractals. Written by Scott Draves.

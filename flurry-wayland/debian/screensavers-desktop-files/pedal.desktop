@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Pedal
+Exec=/usr/libexec/xscreensaver/pedal --root
+TryExec=/usr/libexec/xscreensaver/pedal
+Comment=The even-odd winding rule. https://en.wikipedia.org/wiki/Even-odd_rule https://en.wikipedia.org/wiki/Nonzero-rule Written by Dale Moore.

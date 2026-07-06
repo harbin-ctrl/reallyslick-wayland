@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Rubik Blocks
+Exec=/usr/libexec/xscreensaver/rubikblocks --root
+TryExec=/usr/libexec/xscreensaver/rubikblocks
+Comment=The "Rubik's Mirror Blocks" puzzle. See also the "Rubik", "Cube21", and "GLSnake" screen savers. https://en.wikipedia.org/wiki/Combination_puzzles#Irregular_cuboids Written by Vasek Potocek.

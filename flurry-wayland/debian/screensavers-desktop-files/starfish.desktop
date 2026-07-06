@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Starfish
+Exec=/usr/libexec/xscreensaver/starfish --root
+TryExec=/usr/libexec/xscreensaver/starfish
+Comment=Undulating, throbbing, star-like patterns pulsate, rotate, and turn inside out. Written by Jamie Zawinski.

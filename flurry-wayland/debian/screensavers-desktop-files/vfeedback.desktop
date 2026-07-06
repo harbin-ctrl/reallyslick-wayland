@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=VFeedback
+Exec=/usr/libexec/xscreensaver/vfeedback --root
+TryExec=/usr/libexec/xscreensaver/vfeedback
+Comment=Simulates video feedback: pointing a video camera at an NTSC television. Written by Jamie Zawinski.

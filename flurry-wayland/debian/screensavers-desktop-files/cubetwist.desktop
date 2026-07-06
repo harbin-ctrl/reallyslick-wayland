@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cube Twist
+Exec=/usr/libexec/xscreensaver/cubetwist --root
+TryExec=/usr/libexec/xscreensaver/cubetwist
+Comment=A series of nested cubes rotate and slide recursively. Written by Jamie Zawinski.

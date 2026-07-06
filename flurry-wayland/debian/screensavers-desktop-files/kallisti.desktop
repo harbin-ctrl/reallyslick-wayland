@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Kallisti
+Exec=/usr/libexec/xscreensaver/kallisti --root
+TryExec=/usr/libexec/xscreensaver/kallisti
+Comment=The golden apple of discord. Greek goddess Eris was not invited to a wedding; her retort was to toss in a golden apple, inscribed: "to the fairest". Hera, Athena and Aphrodite squabbled over it; Zeus noped out, telling Paris of Troy to decide. They all cheated, but Aphrodite won by letting Paris abduct and marry Helen of Sparta. The Greeks objected to this, leading to the Trojan War. Do you want to launch a thousand ships? Because this is how you launch a thousand ships. https://en.wikipedia.org/wiki/Judgement_of_Paris Written by Jamie Zawinski and Jared Williams.

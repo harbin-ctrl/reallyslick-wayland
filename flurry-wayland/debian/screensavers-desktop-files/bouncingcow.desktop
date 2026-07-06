@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Bouncing Cow
+Exec=/usr/libexec/xscreensaver/bouncingcow --root
+TryExec=/usr/libexec/xscreensaver/bouncingcow
+Comment=A Cow. A Trampoline. Together, they fight crime. Written by Jamie Zawinski.

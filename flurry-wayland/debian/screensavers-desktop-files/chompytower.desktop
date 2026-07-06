@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Chompy Tower
+Exec=/usr/libexec/xscreensaver/chompytower --root
+TryExec=/usr/libexec/xscreensaver/chompytower
+Comment=This tree's got teeth! Written by Jamie Zawinski.

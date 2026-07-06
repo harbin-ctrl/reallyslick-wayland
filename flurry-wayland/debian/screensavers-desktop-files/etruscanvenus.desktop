@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Etruscan Venus
+Exec=/usr/libexec/xscreensaver/etruscanvenus --root
+TryExec=/usr/libexec/xscreensaver/etruscanvenus
+Comment=A 3D immersion of a Klein bottle that smoothly deforms between the Etruscan Venus surface, the Roman surface, the Boy surface, and the Ida surface. Topologically, all surfaces are Klein bottles, even the Roman and Boy surfaces, which are doubly covered and therefore appear to be an immersed real projective plane. You can walk on the Klein bottle or rotate it in 3D. Since all the surfaces except the Ida surfaces have points where the surface normal is not well defined for some points, walking is performed on the Ida surface. Furthermore, it is possible to smoothly deform the surface between the Etruscan Venus surface, the Roman surface, the Boy surface, and the Ida surface surface while turning it. Inspired by George K. Francis's book "A Topological Picturebook", Springer, 1987, George K. Francis's paper "The Etruscan Venus" in P. Concus, R. Finn, and D. A. Hoffman: "Geometric Analysis and Computer Graphics", Springer, 1991, and a video entitled "The Etruscan Venus" by Donna J. Cox, George K. Francis, and Raymond L. Idaszak, presented at SIGGRAPH 1989. https://en.wikipedia.org/wiki/Boy%27s_surface https://en.wikipedia.org/wiki/Roman_surface https://en.wikipedia.org/wiki/Klein_bottle Written by Carsten Steger.

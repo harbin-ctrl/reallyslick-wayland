@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Anemone
+Exec=/usr/libexec/xscreensaver/anemone --root
+TryExec=/usr/libexec/xscreensaver/anemone
+Comment=Wiggling tentacles. Written by Gabriel Finch.

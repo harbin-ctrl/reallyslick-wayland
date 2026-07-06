@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Flurry
+Exec=/usr/libexec/xscreensaver/flurry --root
+TryExec=/usr/libexec/xscreensaver/flurry
+Comment=A colourful star(fish)like flurry of particles. Written by Calum Robinson and Tobias Sargeant.

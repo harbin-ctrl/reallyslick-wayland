@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GFlux
+Exec=/usr/libexec/xscreensaver/gflux --root
+TryExec=/usr/libexec/xscreensaver/gflux
+Comment=Undulating waves on a rotating grid. Written by Josiah Pease.

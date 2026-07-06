@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Klein
+Exec=/usr/libexec/xscreensaver/klein --root
+TryExec=/usr/libexec/xscreensaver/klein
+Comment=A Klein bottle is the 4D analog of a möbius strip. You can walk on the surface of the bottle or rotate it in 4D or walk on it while it rotates in 4D. Inspired by Thomas Banchoff's book "Beyond the Third Dimension: Geometry, Computer Graphics, and Higher Dimensions", Scientific American Library, 1990. https://en.wikipedia.org/wiki/Klein_bottle Written by Carsten Steger.

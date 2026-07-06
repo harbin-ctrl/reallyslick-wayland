@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Spotlight
+Exec=/usr/libexec/xscreensaver/spotlight --root
+TryExec=/usr/libexec/xscreensaver/spotlight
+Comment=A spotlight scanning across a black screen, illuminating a loaded image when it passes. Written by Rick Schultz and Jamie Zawinski.

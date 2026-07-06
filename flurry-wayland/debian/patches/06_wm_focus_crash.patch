@@ -1,0 +1,20 @@
+Description: Comment out error handler registration
+ It would interfere with GTK's own error handling.
+ Workaround until GTK possibly fixes it.
+Forwarded: not-needed
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1030909
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/demo-Gtk.c
+===================================================================
+--- xscreensaver-git.orig/driver/demo-Gtk.c
++++ xscreensaver-git/driver/demo-Gtk.c
+@@ -5067,7 +5067,7 @@ xscreensaver_window_realize (GtkWidget *
+       XtAppCreateShell (progname, progclass, applicationShellWidgetClass,
+                         s->dpy, 0, 0);
+       p->db = XtDatabase (s->dpy);
+-      XSetErrorHandler (x_error);
++      /* XSetErrorHandler (x_error); */
+ 
+       signal (SIGPIPE, SIG_IGN);  /* Is this necessary? */
+ 

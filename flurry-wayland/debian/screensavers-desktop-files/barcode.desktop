@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Barcode
+Exec=/usr/libexec/xscreensaver/barcode --root
+TryExec=/usr/libexec/xscreensaver/barcode
+Comment=Scrolling UPC-A, UPC-E, EAN-8 and EAN-13 barcodes. CONSUME! https://en.wikipedia.org/wiki/Universal_Product_Code https://en.wikipedia.org/wiki/European_Article_Number Written by Dan Bornstein and Jamie Zawinski.

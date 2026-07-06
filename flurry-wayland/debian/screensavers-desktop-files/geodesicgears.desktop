@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Geodesic Gears
+Exec=/usr/libexec/xscreensaver/geodesicgears --root
+TryExec=/usr/libexec/xscreensaver/geodesicgears
+Comment=A set of meshed gears arranged on the surface of a sphere. https://en.wikipedia.org/wiki/Geodesic_dome https://en.wikipedia.org/wiki/Involute_gear https://en.wikipedia.org/wiki/Buckminster_Fuller Written by Jamie Zawinski.

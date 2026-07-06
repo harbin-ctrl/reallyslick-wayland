@@ -1,0 +1,18 @@
+Description: Debian branding
+ Show Planet Debian posts instead of Wikipedia pages
+Forwarded: not-needed
+Author: Josselin Mouette <joss@debian.org>
+
+Index: xscreensaver-git/driver/XScreenSaver.ad.in
+===================================================================
+--- xscreensaver-git.orig/driver/XScreenSaver.ad.in
++++ xscreensaver-git/driver/XScreenSaver.ad.in
+@@ -62,7 +62,7 @@
+ *textLiteral:		XScreenSaver
+ *textFile:		@DEFAULT_TEXT_FILE@
+ *textProgram:		fortune
+-*textURL:		https://en.wikipedia.org/w/index.php?title=Special:NewPages&feed=rss
++*textURL:		https://planet.debian.org/rss20.xml
+ 
+ ! This is what the "Settings" button on the splash screen runs.
+ *demoCommand: xscreensaver-settings

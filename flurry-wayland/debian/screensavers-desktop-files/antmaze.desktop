@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Ant Maze
+Exec=/usr/libexec/xscreensaver/antmaze --root
+TryExec=/usr/libexec/xscreensaver/antmaze
+Comment=Ants walk around a simple maze. Written by Blair Tennessy.

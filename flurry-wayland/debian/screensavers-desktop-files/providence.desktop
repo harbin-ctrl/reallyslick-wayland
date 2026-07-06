@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Providence
+Exec=/usr/libexec/xscreensaver/providence --root
+TryExec=/usr/libexec/xscreensaver/providence
+Comment="A pyramid unfinished. In the zenith an eye in a triangle, surrounded by a glory, proper." https://en.wikipedia.org/wiki/Eye_of_Providence Written by Blair Tennessy.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Hopalong
+Exec=/usr/libexec/xscreensaver/hopalong --root
+TryExec=/usr/libexec/xscreensaver/hopalong
+Comment=Lacy fractal patterns based on iteration in the imaginary plane, from a 1986 Scientific American article. See also the "Discrete" screen saver. Written by Patrick Naughton.

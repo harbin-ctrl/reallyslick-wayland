@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Block Tube
+Exec=/usr/libexec/xscreensaver/blocktube --root
+TryExec=/usr/libexec/xscreensaver/blocktube
+Comment=A swirling, falling tunnel of reflective slabs. They fade from hue to hue. Written by Lars R. Damerow.

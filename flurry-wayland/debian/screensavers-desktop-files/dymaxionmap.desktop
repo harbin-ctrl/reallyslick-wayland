@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Dymaxion Map
+Exec=/usr/libexec/xscreensaver/dymaxionmap --root
+TryExec=/usr/libexec/xscreensaver/dymaxionmap
+Comment=Buckminster Fuller's map of the Earth projected onto the surface of an unfolded icosahedron. It depicts the Earth's continents as one island, or nearly contiguous land masses. This screen saver animates the progression of the dusk terminator across the flattened globe. It includes both satellite and flat-colored map imagery, and can load and convert other Equirectangular-projected maps. "Dymaxion Map" and "The Fuller Projection Map" are trademarks of The Buckminster Fuller Institute. The original Dymaxion Map image is copyright 1982 by The Buckminster Fuller Institute. (This program does not use their imagery, only similar trigonometry.) The Dymaxion Map was covered by now-expired US Patent 2,393,676 (Richard Buckminster Fuller, 1946). https://en.wikipedia.org/wiki/Dymaxion_map https://en.wikipedia.org/wiki/Buckminster_Fuller https://en.wikipedia.org/wiki/List_of_map_projections https://en.wikipedia.org/wiki/Cahill%E2%80%93Keyes_projection https://en.wikipedia.org/wiki/Waterman_butterfly_projection Written by Jamie Zawinski.

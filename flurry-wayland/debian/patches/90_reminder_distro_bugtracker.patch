@@ -1,0 +1,17 @@
+Description: Remind users to use distro bug tracker if old version
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/xscreensaver.c
+===================================================================
+--- xscreensaver-git.orig/driver/xscreensaver.c
++++ xscreensaver-git/driver/xscreensaver.c
+@@ -686,6 +686,8 @@ print_banner(void)
+                  "\t   ###################################################\n"
+                  "\t   ###                                             ###\n"
+                  "\t   ###  THIS VERSION IS VERY OLD! PLEASE UPGRADE!  ###\n"
++                 "\t   ###  Do not report bugs upstream, please use    ###\n"
++                 "\t   ###  your distro (Debian/Ubuntu) bug tracker.   ###\n"
+                  "\t   ###                                             ###\n"
+                  "\t   ###################################################\n"
+                  "\n");

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=IMS Map
+Exec=/usr/libexec/xscreensaver/imsmap --root
+TryExec=/usr/libexec/xscreensaver/imsmap
+Comment=Recursive cloud-like fractal patterns. Written by Juergen Nickelsen and Jamie Zawinski.

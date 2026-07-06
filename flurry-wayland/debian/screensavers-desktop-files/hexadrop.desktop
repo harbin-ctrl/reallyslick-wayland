@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Hexadrop
+Exec=/usr/libexec/xscreensaver/hexadrop --root
+TryExec=/usr/libexec/xscreensaver/hexadrop
+Comment=A grid of hexagons or other shapes, with tiles dropping out. https://en.wikipedia.org/wiki/Tiling_by_regular_polygons Written by Jamie Zawinski.

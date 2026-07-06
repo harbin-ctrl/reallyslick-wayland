@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Bumps
+Exec=/usr/libexec/xscreensaver/bumps --root
+TryExec=/usr/libexec/xscreensaver/bumps
+Comment=A spotlight roams across an embossed version of a loaded image. Written by Shane Smit.

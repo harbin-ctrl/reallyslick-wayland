@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Mountain
+Exec=/usr/libexec/xscreensaver/mountain --root
+TryExec=/usr/libexec/xscreensaver/mountain
+Comment=3D plots that are vaguely mountainous. Written by Pascal Pensa.

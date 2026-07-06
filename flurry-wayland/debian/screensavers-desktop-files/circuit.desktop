@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Circuit
+Exec=/usr/libexec/xscreensaver/circuit --root
+TryExec=/usr/libexec/xscreensaver/circuit
+Comment=Electronic components float around. Written by Ben Buxton.

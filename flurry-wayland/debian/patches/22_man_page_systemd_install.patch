@@ -1,0 +1,21 @@
+Description: Modify man page instructions about systemd
+ On Debian the service unit file is already installed.
+Forwarded: not-needed
+Bug-Debian: https://bugs.debian.org/1037434
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/xscreensaver.man
+===================================================================
+--- xscreensaver-git.orig/driver/xscreensaver.man
++++ xscreensaver-git/driver/xscreensaver.man
+@@ -241,9 +241,7 @@ If you are not using GNOME, KDE or LXDE,
+ at login is probably
+ .BR systemd (1).
+ 
+-Copy the file \fI/usr/share/xscreensaver/xscreensaver.service\fP into
+-the directory \fI~/.config/systemd/user/\fP.  Create that directory first
+-if it doesn't exist.  Then enable it with:
++On Debian, enable the xscreensaver systemd service with:
+ .nf
+ .sp
+ 	systemctl \-\-user enable xscreensaver

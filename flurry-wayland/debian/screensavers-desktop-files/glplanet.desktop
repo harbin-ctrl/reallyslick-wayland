@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL Planet
+Exec=/usr/libexec/xscreensaver/glplanet --root
+TryExec=/usr/libexec/xscreensaver/glplanet
+Comment=The Earth, bouncing around in space, rendered with satellite imagery of the planet in both sunlight and darkness. If you would like it to display a different planet, any pair of Equirectangular-projected maps will work. The maps that come with "ssystem" work well. Written by David Konerding and Jamie Zawinski.

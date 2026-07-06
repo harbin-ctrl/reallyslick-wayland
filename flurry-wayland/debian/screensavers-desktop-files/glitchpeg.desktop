@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GlitchPEG
+Exec=/usr/libexec/xscreensaver/glitchpeg --root
+TryExec=/usr/libexec/xscreensaver/glitchpeg
+Comment=Loads an image, corrupts it, and then displays the corrupted version, several times a second. After a while, finds a new image to corrupt. Written by Jamie Zawinski.

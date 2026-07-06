@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Mem Scroller
+Exec=/usr/libexec/xscreensaver/memscroller --root
+TryExec=/usr/libexec/xscreensaver/memscroller
+Comment=Scrolls a dump of its own memory in three windows at three different rates. Written by Jamie Zawinski.

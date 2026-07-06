@@ -1,0 +1,28 @@
+Description: Generalize external commands
+ xdg-open man: will use e.g. yelp if available.
+ Fall back to the standard x-terminal-emulator command,
+ which can be a link to any terminal emulator.
+ .
+ There is no safe "title" option for x-terminal-emulator.
+ .
+ We assume a pager such as "less" is installed, so that the
+ "read foo" is not needed - it would cause a lingering empty
+ window after "less" was quit by the user.
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/XScreenSaver.ad.in
+===================================================================
+--- xscreensaver-git.orig/driver/XScreenSaver.ad.in
++++ xscreensaver-git/driver/XScreenSaver.ad.in
+@@ -98,8 +98,8 @@
+ !   non-Gnome systems:
+ !
+ @NOGNOME@*loadURL: x-www-browser '%s' || firefox '%s' || chromium-browser '%s'
+-@NOGNOME@*manualCommand: lxterminal -T '%s manual' \
+-@NOGNOME@		    -e /bin/sh -c 'man "%s" ; read foo'
++@NOGNOME@*manualCommand: xdg-open man:%s || \
++@NOGNOME@		    x-terminal-emulator -e /bin/sh -c 'man "%s"'
+ 
+ 
+ ! The strftime(3) format string for printing the time on the password dialog.

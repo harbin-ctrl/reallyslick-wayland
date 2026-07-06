@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Bubble 3D
+Exec=/usr/libexec/xscreensaver/bubble3d --root
+TryExec=/usr/libexec/xscreensaver/bubble3d
+Comment=Rising, undulating 3D bubbles, with transparency and specular reflections. Written by Richard Jones.

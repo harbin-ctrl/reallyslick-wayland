@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Box Fit
+Exec=/usr/libexec/xscreensaver/boxfit --root
+TryExec=/usr/libexec/xscreensaver/boxfit
+Comment=Packs the screen with growing squares or circles which grow until they touch, then stop. Written by Jamie Zawinski.

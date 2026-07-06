@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Paper Cube
+Exec=/usr/libexec/xscreensaver/papercube --root
+TryExec=/usr/libexec/xscreensaver/papercube
+Comment=How to make a glueless paper cube. Written by Ireneusz Szpilewski and Jamie Zawinski.

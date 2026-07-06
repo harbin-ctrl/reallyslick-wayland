@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Font Glide
+Exec=/usr/libexec/xscreensaver/fontglide --root
+TryExec=/usr/libexec/xscreensaver/fontglide
+Comment=Puts text on the screen using large characters that glide in from the edges, assemble, then disperse. Alternately, it can simply scroll whole sentences from right to left. Written by Jamie Zawinski.

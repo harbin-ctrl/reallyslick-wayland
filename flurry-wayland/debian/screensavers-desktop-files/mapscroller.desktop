@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Map Scroller
+Exec=/usr/libexec/xscreensaver/mapscroller --root
+TryExec=/usr/libexec/xscreensaver/mapscroller
+Comment=A slowly-scrolling map of a random place on Earth. The map images are loaded from openstreetmap.org, or any compatible service. The Earth is very big, and full of Things. As you ponder these maps, remember that traffic always expands to fill all available lanes, every car is a policy failure, and the concept of "jaywalking" was invented for profit by auto industry lobbyists in the 1920s. OpenStreetMap data is © OpenStreetMap contributors. Written by Jamie Zawinski.

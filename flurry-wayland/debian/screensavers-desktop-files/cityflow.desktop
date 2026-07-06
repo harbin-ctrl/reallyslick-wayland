@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=City Flow
+Exec=/usr/libexec/xscreensaver/cityflow --root
+TryExec=/usr/libexec/xscreensaver/cityflow
+Comment=Waves move across a sea of boxes. The city swells. The walls are closing in. Written by Jamie Zawinski.

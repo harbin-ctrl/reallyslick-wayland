@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cloud Life
+Exec=/usr/libexec/xscreensaver/cloudlife --root
+TryExec=/usr/libexec/xscreensaver/cloudlife
+Comment=Cloud-like formations based on a variant of Conway's Life. The difference is that cells have a maximum age, after which they count as 3 for populating the next generation. This makes long-lived formations explode instead of just sitting there. https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life Written by Don Marti.

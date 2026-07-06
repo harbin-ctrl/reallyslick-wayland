@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Skulloop
+Exec=/usr/libexec/xscreensaver/skulloop --root
+TryExec=/usr/libexec/xscreensaver/skulloop
+Comment=Recursive descent into a Platonic unit skull. Written by Jamie Zawinski.

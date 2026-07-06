@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Juggler 3D
+Exec=/usr/libexec/xscreensaver/juggler3d --root
+TryExec=/usr/libexec/xscreensaver/juggler3d
+Comment=A 3D juggling stick-person, with Cambridge juggling pattern notation used to describe the patterns juggled. https://en.wikipedia.org/wiki/Siteswap Written by Tim Auckland and Jamie Zawinski.

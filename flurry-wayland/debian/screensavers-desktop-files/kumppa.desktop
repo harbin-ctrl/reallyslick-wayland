@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Kumppa
+Exec=/usr/libexec/xscreensaver/kumppa --root
+TryExec=/usr/libexec/xscreensaver/kumppa
+Comment=Spiraling, spinning, and very, very fast splashes of color rush toward the screen. Written by Teemu Suutari.

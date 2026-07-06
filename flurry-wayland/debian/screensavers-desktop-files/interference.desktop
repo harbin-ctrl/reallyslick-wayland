@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Interference
+Exec=/usr/libexec/xscreensaver/interference --root
+TryExec=/usr/libexec/xscreensaver/interference
+Comment=Decaying sinusoidal waves make colors. Written by Hannu Mallat.

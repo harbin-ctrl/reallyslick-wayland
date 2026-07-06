@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Time Tunnel
+Exec=/usr/libexec/xscreensaver/timetunnel --root
+TryExec=/usr/libexec/xscreensaver/timetunnel
+Comment=An animation similar to the title sequence of Dr. Who in the 70s. Written by Sean P. Brennan.

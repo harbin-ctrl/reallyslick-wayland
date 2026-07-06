@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Mirror Blob
+Exec=/usr/libexec/xscreensaver/mirrorblob --root
+TryExec=/usr/libexec/xscreensaver/mirrorblob
+Comment=A wobbly blob distorts images behind it. Written by Jon Dowdall.

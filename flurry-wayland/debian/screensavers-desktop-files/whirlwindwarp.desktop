@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Whirlwind Warp
+Exec=/usr/libexec/xscreensaver/whirlwindwarp --root
+TryExec=/usr/libexec/xscreensaver/whirlwindwarp
+Comment=Floating stars are acted upon by a mixture of simple 2D force fields. The strength of each force field changes continuously, and it is also switched on and off at random. Written by Paul 'Joey' Clark.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Strange
+Exec=/usr/libexec/xscreensaver/strange --root
+TryExec=/usr/libexec/xscreensaver/strange
+Comment=Strange attractors: a swarm of dots swoops and twists around. https://en.wikipedia.org/wiki/Attractor#Strange_attractor Written by Massimino Pascal.

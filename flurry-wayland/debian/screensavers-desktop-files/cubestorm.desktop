@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cube Storm
+Exec=/usr/libexec/xscreensaver/cubestorm --root
+TryExec=/usr/libexec/xscreensaver/cubestorm
+Comment=Boxes change shape and intersect each other, filling space. Written by Jamie Zawinski.

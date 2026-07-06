@@ -1,0 +1,11 @@
+This package uses quilt as patch system. Please, refer to
+/usr/share/doc/quilt/README.source for more about adding, removing or
+updating the patches on this package.
+
+Also, "dpkg-source --commit" might work well for adding smaller fixes.
+
+To incorporate new upstream releases: gbp import-orig --uscan
+
+To generate desktop files for new hacks, use debian/screensavers-desktop-qa.sh
+
+This package is uploaded using dgit, please consider using it for your uploads.

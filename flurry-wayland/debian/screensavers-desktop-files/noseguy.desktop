@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Nose Guy
+Exec=/usr/libexec/xscreensaver/noseguy --root
+TryExec=/usr/libexec/xscreensaver/noseguy
+Comment=A little man with a big nose wanders around your screen saying things. Written by Dan Heller and Jamie Zawinski.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Fade Plot
+Exec=/usr/libexec/xscreensaver/fadeplot --root
+TryExec=/usr/libexec/xscreensaver/fadeplot
+Comment=A waving ribbon follows a sinusoidal path. Written by Bas van Gaalen and Charles Vidal.

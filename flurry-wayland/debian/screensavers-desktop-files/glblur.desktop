@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL Blur
+Exec=/usr/libexec/xscreensaver/glblur --root
+TryExec=/usr/libexec/xscreensaver/glblur
+Comment=Flowing field effects from the vapor trails around a moving object. This is done by rendering the scene into a small texture, then repeatedly rendering increasingly-enlarged and increasingly-transparent versions of that texture onto the frame buffer. As such, it's quite GPU-intensive: if you don't have a very good graphics card, it will hurt your machine bad. Written by Jamie Zawinski.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Goop
+Exec=/usr/libexec/xscreensaver/goop --root
+TryExec=/usr/libexec/xscreensaver/goop
+Comment=Translucent amoeba-like blobs wander the screen. Written by Jamie Zawinski.

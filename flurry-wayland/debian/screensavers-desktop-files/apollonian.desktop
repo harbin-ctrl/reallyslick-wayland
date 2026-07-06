@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Apollonian
+Exec=/usr/libexec/xscreensaver/apollonian --root
+TryExec=/usr/libexec/xscreensaver/apollonian
+Comment=A fractal packing of circles with smaller circles, demonstrating Descartes's theorem. https://en.wikipedia.org/wiki/Apollonian_gasket https://en.wikipedia.org/wiki/Descartes%27_theorem Written by Allan R. Wilks and David Bagley.

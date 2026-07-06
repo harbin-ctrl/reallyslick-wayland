@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Rot Zoomer
+Exec=/usr/libexec/xscreensaver/rotzoomer --root
+TryExec=/usr/libexec/xscreensaver/rotzoomer
+Comment=Distorts an image by rotating and scaling random sections of it. Written by Claudio Matsuoka and Jamie Zawinski.

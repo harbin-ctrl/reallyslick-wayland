@@ -1,0 +1,6 @@
+config.log config.h
+driver/XScreenSaver.ad-nogl
+debian/xscreensaver*.install
+debian/xscreensaver*.manpages
+po/.intltool-merge-cache
+NEWS

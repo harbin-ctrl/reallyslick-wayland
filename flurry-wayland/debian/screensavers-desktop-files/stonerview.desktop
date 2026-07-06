@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Stoner View
+Exec=/usr/libexec/xscreensaver/stonerview --root
+TryExec=/usr/libexec/xscreensaver/stonerview
+Comment=Chains of colorful squares dance around in spirals. Inspired by the classic SGI "ElectroPaint" screen saver from the 1980s. Written by Andrew Plotkin.

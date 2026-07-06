@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Abstractile
+Exec=/usr/libexec/xscreensaver/abstractile --root
+TryExec=/usr/libexec/xscreensaver/abstractile
+Comment=Mosaic patterns of interlocking tiles. Written by Steve Sundstrom.

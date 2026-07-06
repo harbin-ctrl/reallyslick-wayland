@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Extrusion
+Exec=/usr/libexec/xscreensaver/extrusion --root
+TryExec=/usr/libexec/xscreensaver/extrusion
+Comment=Various extruded shapes twist and turn inside out. Written by Linas Vepstas, David Konerding, and Jamie Zawinski.

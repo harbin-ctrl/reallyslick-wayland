@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Fluid Balls
+Exec=/usr/libexec/xscreensaver/fluidballs --root
+TryExec=/usr/libexec/xscreensaver/fluidballs
+Comment=A particle system of bouncing balls. Gravity moves around to shake the box. Written by Peter Birtles and Jamie Zawinski.

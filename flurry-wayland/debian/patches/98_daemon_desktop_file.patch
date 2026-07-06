@@ -1,0 +1,42 @@
+Description: Customize desktop files
+ - No hashbang
+ - Use our wrapper which may set newLoginCommand
+ - "Screensaver" is a Reserved Category
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/xscreensaver.desktop.in
+===================================================================
+--- xscreensaver-git.orig/driver/xscreensaver.desktop.in
++++ xscreensaver-git/driver/xscreensaver.desktop.in
+@@ -1,9 +1,12 @@
+-#!/usr/bin/env xdg-open
+ [Desktop Entry]
+-Exec=xscreensaver
+ Icon=xscreensaver
+ _Name=XScreenSaver
+ _Comment=XScreenSaver daemon: screen saver and locker
+ Type=Application
+-Categories=Screensaver;Security;GNOME;GTK;KDE;Motif;Qt
++Categories=Security
+ Terminal=false
++TryExec=xscreensaver
++Exec=/usr/share/xscreensaver/xscreensaver-wrapper.sh -nosplash
++NoDisplay=true
++X-KDE-StartupNotify=false
++# NotShowIn=KDE;GNOME;
+Index: xscreensaver-git/driver/xscreensaver-settings.desktop.in
+===================================================================
+--- xscreensaver-git.orig/driver/xscreensaver-settings.desktop.in
++++ xscreensaver-git/driver/xscreensaver-settings.desktop.in
+@@ -1,9 +1,8 @@
+-#!/usr/bin/env xdg-open
+ [Desktop Entry]
+ Exec=xscreensaver-settings
+ Icon=xscreensaver
+ _Name=XScreenSaver Settings
+ _Comment=Change screensaver properties
+ Type=Application
+-Categories=Settings;DesktopSettings;Screensaver;Security;GNOME;GTK;KDE;Motif;Qt;X-GNOME-Settings-Panel;X-GNOME-SystemSettings;X-Unity-Settings-Panel;X-XFCE-SettingsDialog;X-XFCE-SystemSettings
++Categories=Settings;DesktopSettings;Security
+ Terminal=false

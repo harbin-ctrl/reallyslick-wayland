@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Ant Spotlight
+Exec=/usr/libexec/xscreensaver/antspotlight --root
+TryExec=/usr/libexec/xscreensaver/antspotlight
+Comment=An ant walks over an image. Written by Blair Tennessy.

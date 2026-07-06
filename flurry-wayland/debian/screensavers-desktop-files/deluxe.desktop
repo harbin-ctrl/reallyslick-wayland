@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Deluxe
+Exec=/usr/libexec/xscreensaver/deluxe --root
+TryExec=/usr/libexec/xscreensaver/deluxe
+Comment=Pulsing stars, circles, and lines. Written by Jamie Zawinski.

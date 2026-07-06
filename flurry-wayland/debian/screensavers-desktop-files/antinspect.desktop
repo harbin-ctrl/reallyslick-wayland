@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Ant Inspect
+Exec=/usr/libexec/xscreensaver/antinspect --root
+TryExec=/usr/libexec/xscreensaver/antinspect
+Comment=Ants move spheres around a circle. Written by Blair Tennessy.

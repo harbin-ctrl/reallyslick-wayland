@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Rorschach
+Exec=/usr/libexec/xscreensaver/rorschach --root
+TryExec=/usr/libexec/xscreensaver/rorschach
+Comment=Inkblot patterns via a reflected random walk. https://en.wikipedia.org/wiki/Rorschach_inkblot_test https://en.wikipedia.org/wiki/Random_walk Written by Jamie Zawinski.

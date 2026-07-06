@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Atlantis
+Exec=/usr/libexec/xscreensaver/atlantis --root
+TryExec=/usr/libexec/xscreensaver/atlantis
+Comment=Sharks, dolphins and whales. Written by Mark Kilgard.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Ripples
+Exec=/usr/libexec/xscreensaver/ripples --root
+TryExec=/usr/libexec/xscreensaver/ripples
+Comment=Rippling interference patterns reminiscent of splashing water distort a loaded image. Written by Tom Hammersley.

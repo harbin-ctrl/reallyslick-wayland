@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Maze 3D
+Exec=/usr/libexec/xscreensaver/maze3d --root
+TryExec=/usr/libexec/xscreensaver/maze3d
+Comment=A re-creation of the 3D Maze screensaver from Windows 95. Written by Sudoer.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=COVID19
+Exec=/usr/libexec/xscreensaver/covid19 --root
+TryExec=/usr/libexec/xscreensaver/covid19
+Comment=SARS-CoV-2. Get vaccinated. Wear a mask. Written by Jamie Zawinski.

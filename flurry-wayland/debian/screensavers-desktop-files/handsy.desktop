@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Handsy
+Exec=/usr/libexec/xscreensaver/handsy --root
+TryExec=/usr/libexec/xscreensaver/handsy
+Comment=A set of robotic hands communicate non-verbally. Written by Jamie Zawinski.

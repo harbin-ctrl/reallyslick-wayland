@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL Slideshow
+Exec=/usr/libexec/xscreensaver/glslideshow --root
+TryExec=/usr/libexec/xscreensaver/glslideshow
+Comment=Loads a random sequence of images and smoothly scans and zooms around in each, fading from pan to pan. Written by Jamie Zawinski and Mike Oliphant.

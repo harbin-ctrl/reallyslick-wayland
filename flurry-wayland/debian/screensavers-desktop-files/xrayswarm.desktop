@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=XRaySwarm
+Exec=/usr/libexec/xscreensaver/xrayswarm --root
+TryExec=/usr/libexec/xscreensaver/xrayswarm
+Comment=Worm-like swarms of particles with vapor trails. Written by Chris Leger.

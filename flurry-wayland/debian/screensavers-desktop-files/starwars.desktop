@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Star Wars
+Exec=/usr/libexec/xscreensaver/starwars --root
+TryExec=/usr/libexec/xscreensaver/starwars
+Comment=A stream of text slowly scrolling into the distance at an angle, over a star field, like at the beginning of the movie of the same name. https://en.wikipedia.org/wiki/Star_Wars_opening_crawl Written by Jamie Zawinski and Claudio Matsuoka.

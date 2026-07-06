@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=High Voltage
+Exec=/usr/libexec/xscreensaver/highvoltage --root
+TryExec=/usr/libexec/xscreensaver/highvoltage
+Comment=A leisurely flight past some high voltage transmission towers. Smell the ozone! ⚠⚡⚠⚡⚠⚡ https://en.wikipedia.org/wiki/Transmission_tower Written by Jamie Zawinski.

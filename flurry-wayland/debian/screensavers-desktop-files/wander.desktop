@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Wander
+Exec=/usr/libexec/xscreensaver/wander --root
+TryExec=/usr/libexec/xscreensaver/wander
+Comment=A colorful random-walk. https://en.wikipedia.org/wiki/Random_walk Written by Rick Campbell.

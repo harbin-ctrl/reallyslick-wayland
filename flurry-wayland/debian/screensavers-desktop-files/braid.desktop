@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Braid
+Exec=/usr/libexec/xscreensaver/braid --root
+TryExec=/usr/libexec/xscreensaver/braid
+Comment=Inter-braided concentric circles. Written by John Neil.

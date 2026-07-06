@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Vid Whacker
+Exec=/usr/libexec/xscreensaver/vidwhacker --root
+TryExec=/usr/libexec/xscreensaver/vidwhacker
+Comment=Distorts an image using a random series of filters: edge detection, subtracting the image from a rotated version of itself, etc. Written by Jamie Zawinski.

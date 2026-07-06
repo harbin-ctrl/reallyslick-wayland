@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Gleidescope
+Exec=/usr/libexec/xscreensaver/gleidescope --root
+TryExec=/usr/libexec/xscreensaver/gleidescope
+Comment=A kaleidoscope that operates on a loaded image. https://en.wikipedia.org/wiki/Kaleidoscope Written by Andrew Dean.

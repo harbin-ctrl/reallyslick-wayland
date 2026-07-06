@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=C Curve
+Exec=/usr/libexec/xscreensaver/ccurve --root
+TryExec=/usr/libexec/xscreensaver/ccurve
+Comment=Generates self-similar linear fractals, including the classic "C Curve". https://en.wikipedia.org/wiki/Levy_C_curve Written by Rick Campbell.

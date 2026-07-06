@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Zoom
+Exec=/usr/libexec/xscreensaver/zoom --root
+TryExec=/usr/libexec/xscreensaver/zoom
+Comment=Fatbits! Zooms in on a part of an image and scrolls, distorting each pixel with its own lens. Written by James Macnicol.

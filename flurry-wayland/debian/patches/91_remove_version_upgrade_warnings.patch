@@ -1,0 +1,59 @@
+Description: Remove unnecessary version upgrade warnings.
+ In order to help users who are on old, buggy, and possibly insecure versions
+ of XScreenSaver, there is are multiple messages in XScreenSaver that warn the
+ user that their XScreenSaver version is very old and that they should
+ upgrade, building from source if necessary.
+ .
+ Debian backports bug and security fixes to older versions of software as
+ needed and as possible. It should not be necessary for the user to upgrade
+ XScreenSaver manually. Additionally, building XScreenSaver from source
+ could possibly break a user's system by changing system files without
+ benefit of the package manager.
+ .
+ This patch removes the unnecessary warning.
+Forwarded: not-needed
+Bug-Ubuntu: https://launchpad.net/bugs/2009306
+Author: Aaron Rainbolt <arraybolt3@ubuntu.com>
+Last-Update: 2024-02-13
+
+Index: xscreensaver-git/driver/dialog.c
+===================================================================
+--- xscreensaver-git.orig/driver/dialog.c
++++ xscreensaver-git/driver/dialog.c
+@@ -1454,18 +1454,24 @@ window_draw (window_state *ws)
+      disrespect the wishes of the person who wrote all of this software for
+      you -- you are a terrible person.  Kindly go fuck yourself.
+   */
+-  if (time ((time_t *) 0) - XSCREENSAVER_RELEASED > 60*60*24*30*17)
+-    {
+-      lines[i].text  = _("Update available!\nThis version is very old.\n");
+-      lines[i].font  = ws->error_font;
+-      lines[i].fg    = ws->xft_error_foreground;
+-      lines[i].fg2   = lines[i].fg;
+-      lines[i].bg    = ws->background;
+-      lines[i].type  = LABEL;
+-      lines[i].align = CENTER;
+-      i++;
+-    }
+-  else if (strstr (ws->version, "a") || strstr (ws->version, "b"))
++  /* The outdated software warning is unnecessary in Debian. The "else" in the
++   * else if block also needs patched out since it's a syntax error when the
++   * first "if" is patched out.
++   *
++   * if (time ((time_t *) 0) - XSCREENSAVER_RELEASED > 60*60*24*30*17)
++   *   {
++   *     lines[i].text  = _("Update available!\nThis version is very old.\n");
++   *     lines[i].font  = ws->error_font;
++   *     lines[i].fg    = ws->xft_error_foreground;
++   *     lines[i].fg2   = lines[i].fg;
++   *     lines[i].bg    = ws->background;
++   *     lines[i].type  = LABEL;
++   *     lines[i].align = CENTER;
++   *     i++;
++   *   }
++   * else if (strstr (ws->version, "a") ||
++   */
++  if (strstr (ws->version, "a") || strstr (ws->version, "b"))
+     {
+       lines[i].text  = _("PRE-RELEASE VERSION");
+       lines[i].font  = ws->error_font;

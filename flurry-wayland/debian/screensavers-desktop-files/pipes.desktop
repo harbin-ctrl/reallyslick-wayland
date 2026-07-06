@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Pipes
+Exec=/usr/libexec/xscreensaver/pipes --root
+TryExec=/usr/libexec/xscreensaver/pipes
+Comment=A growing plumbing system, with bolts and valves. Written by Marcelo Vianna and Jamie Zawinski.

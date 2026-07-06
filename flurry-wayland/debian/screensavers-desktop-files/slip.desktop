@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Slip
+Exec=/usr/libexec/xscreensaver/slip --root
+TryExec=/usr/libexec/xscreensaver/slip
+Comment=A jet engine consumes the image, then puts it through a spin cycle. Written by Scott Draves and Jamie Zawinski.

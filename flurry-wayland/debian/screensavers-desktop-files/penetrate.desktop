@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Penetrate
+Exec=/usr/libexec/xscreensaver/penetrate --root
+TryExec=/usr/libexec/xscreensaver/penetrate
+Comment=Simulates (something like) the classic arcade game Missile Command. https://en.wikipedia.org/wiki/Missile_Command Written by Adam Miller.

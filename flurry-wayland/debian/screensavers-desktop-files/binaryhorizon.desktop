@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Binary Horizon
+Exec=/usr/libexec/xscreensaver/binaryhorizon --root
+TryExec=/usr/libexec/xscreensaver/binaryhorizon
+Comment=A system of path tracing particles evolves continuously from an initial horizon, alternating between colors. Written by Patrick Leiser, J. Tarbell and Emilio Del Tessandoro.

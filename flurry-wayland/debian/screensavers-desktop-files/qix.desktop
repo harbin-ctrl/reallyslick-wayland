@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Qix
+Exec=/usr/libexec/xscreensaver/qix --root
+TryExec=/usr/libexec/xscreensaver/qix
+Comment=Bounces a series of line segments around the screen with various presentations. https://en.wikipedia.org/wiki/Qix Written by Jamie Zawinski.

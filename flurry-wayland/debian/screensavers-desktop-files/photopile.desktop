@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Photo Pile
+Exec=/usr/libexec/xscreensaver/photopile --root
+TryExec=/usr/libexec/xscreensaver/photopile
+Comment=Loads images as polaroids and drops them in a pile. Written by Jens Kilian and Jamie Zawinski.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Jigsaw
+Exec=/usr/libexec/xscreensaver/jigsaw --root
+TryExec=/usr/libexec/xscreensaver/jigsaw
+Comment=Carves an image up into a jigsaw puzzle, shuffles it, and solves it. https://en.wikipedia.org/wiki/Jigsaw_puzzle https://en.wikipedia.org/wiki/Tessellation Written by Jamie Zawinski.

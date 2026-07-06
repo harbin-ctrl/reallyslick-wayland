@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Pinion
+Exec=/usr/libexec/xscreensaver/pinion --root
+TryExec=/usr/libexec/xscreensaver/pinion
+Comment=A gear system marches across the screen. See also the "Gears" and "Möbius Gears" screen savers. https://en.wikipedia.org/wiki/Involute_gear Written by Jamie Zawinski.

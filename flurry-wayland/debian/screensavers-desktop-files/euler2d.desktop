@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Euler 2D
+Exec=/usr/libexec/xscreensaver/euler2d --root
+TryExec=/usr/libexec/xscreensaver/euler2d
+Comment=Simulates two dimensional incompressible inviscid fluid flow. https://en.wikipedia.org/wiki/Euler_equations_%28fluid_dynamics%29 https://en.wikipedia.org/wiki/Inviscid_flow Written by Stephen Montgomery-Smith.

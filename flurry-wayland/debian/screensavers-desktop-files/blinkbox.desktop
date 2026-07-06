@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Blink Box
+Exec=/usr/libexec/xscreensaver/blinkbox --root
+TryExec=/usr/libexec/xscreensaver/blinkbox
+Comment=A motion-blurred ball bounces inside a box whose tiles only become visible upon impact. Written by Jeremy English.

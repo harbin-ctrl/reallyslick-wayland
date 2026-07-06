@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=RD-Bomb
+Exec=/usr/libexec/xscreensaver/rdbomb --root
+TryExec=/usr/libexec/xscreensaver/rdbomb
+Comment=Reaction-diffusion: draws a grid of growing square-like shapes that, once they overtake each other, react in unpredictable ways. Written by Scott Draves.

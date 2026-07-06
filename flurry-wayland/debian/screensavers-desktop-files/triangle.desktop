@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Triangle
+Exec=/usr/libexec/xscreensaver/triangle --root
+TryExec=/usr/libexec/xscreensaver/triangle
+Comment=Generates random mountain ranges using iterative subdivision of triangles. Written by Tobias Gloth.

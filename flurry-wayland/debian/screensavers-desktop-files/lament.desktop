@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Lament
+Exec=/usr/libexec/xscreensaver/lament --root
+TryExec=/usr/libexec/xscreensaver/lament
+Comment=Lemarchand's Box, the Lament Configuration. Warning: occasionally opens doors. https://en.wikipedia.org/wiki/Lemarchand%27s_box Written by Jamie Zawinski.

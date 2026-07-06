@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Fuzzy Flakes
+Exec=/usr/libexec/xscreensaver/fuzzyflakes --root
+TryExec=/usr/libexec/xscreensaver/fuzzyflakes
+Comment=Falling colored snowflake/flower shapes. https://en.wikipedia.org/wiki/Snowflake Written by Barry Dmytro.

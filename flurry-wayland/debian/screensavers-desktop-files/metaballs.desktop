@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Meta Balls
+Exec=/usr/libexec/xscreensaver/metaballs --root
+TryExec=/usr/libexec/xscreensaver/metaballs
+Comment=2D meta-balls: overlapping and merging balls with fuzzy edges. https://en.wikipedia.org/wiki/Metaballs Written by W.P. van Paassen.

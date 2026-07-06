@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cubic Grid
+Exec=/usr/libexec/xscreensaver/cubicgrid --root
+TryExec=/usr/libexec/xscreensaver/cubicgrid
+Comment=A rotating lattice of colored points. Written by Vasek Potocek.

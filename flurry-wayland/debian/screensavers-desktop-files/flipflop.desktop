@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Flip Flop
+Exec=/usr/libexec/xscreensaver/flipflop --root
+TryExec=/usr/libexec/xscreensaver/flipflop
+Comment=Colored tiles swap with each other. Written by Kevin Ogden and Sergio Gutierrez.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Squirtorus
+Exec=/usr/libexec/xscreensaver/squirtorus --root
+TryExec=/usr/libexec/xscreensaver/squirtorus
+Comment=A scrolling landscape vents toroidal rainbows into the sky. Above, the stars are slowly going out. Written by Jamie Zawinski.

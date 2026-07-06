@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Coral
+Exec=/usr/libexec/xscreensaver/coral --root
+TryExec=/usr/libexec/xscreensaver/coral
+Comment=Simulates colorful coral growth. Written by Frederick Roeber.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Hypnowheel
+Exec=/usr/libexec/xscreensaver/hypnowheel --root
+TryExec=/usr/libexec/xscreensaver/hypnowheel
+Comment=Overlapping, translucent spiral patterns. The tightness of their spirals fluctuates in and out. https://en.wikipedia.org/wiki/Moire_pattern Written by Jamie Zawinski.

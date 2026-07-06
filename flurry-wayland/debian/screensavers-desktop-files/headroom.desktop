@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Headroom
+Exec=/usr/libexec/xscreensaver/headroom --root
+TryExec=/usr/libexec/xscreensaver/headroom
+Comment="Back in my day, we used to say 'No future'. Well. This is it." -- Blank Reg "I can dump down all the information in the mind. Then I can eliminate any information I don't want. My parrot squawks in much the same way. For the moment, the computer power is only enough to generate a human head." -- Bryce Lynch Written by Jamie Zawinski and Jared Williams.

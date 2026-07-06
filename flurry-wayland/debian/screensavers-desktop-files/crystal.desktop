@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Crystal
+Exec=/usr/libexec/xscreensaver/crystal --root
+TryExec=/usr/libexec/xscreensaver/crystal
+Comment=Moving polygons, similar to a kaleidoscope. See also the "Kaleidescope" and "GLeidescope" screen savers. https://en.wikipedia.org/wiki/Kaleidoscope Written by Jouk Jansen.

@@ -1,0 +1,13 @@
+Description: Missing distclean in Makefile breaks rebuilding
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/hacks/images/Makefile
+===================================================================
+--- xscreensaver-git.orig/hacks/images/Makefile
++++ xscreensaver-git/hacks/images/Makefile
+@@ -61,3 +61,4 @@ uninstall-man:
+ depend:
+ distdepend:
+ tags:
++distclean: clean

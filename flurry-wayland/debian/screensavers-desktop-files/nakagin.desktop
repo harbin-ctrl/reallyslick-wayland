@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Nakagin
+Exec=/usr/libexec/xscreensaver/nakagin --root
+TryExec=/usr/libexec/xscreensaver/nakagin
+Comment=The Nakagin Capsule Tower was demolished in 2022, but this version will continue to grow forever. Constructed in 1972, the building was composed of small prefabricated rooms attached to the two central towers. The capsules were intended to be mass produced and replaceable. Utilities and fittings were installed before the capsules were shipped to the site. https://en.wikipedia.org/wiki/Nakagin_Capsule_Tower Written by Jamie Zawinski.

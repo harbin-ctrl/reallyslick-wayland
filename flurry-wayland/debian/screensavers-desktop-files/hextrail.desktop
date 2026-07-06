@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Hex Trail
+Exec=/usr/libexec/xscreensaver/hextrail --root
+TryExec=/usr/libexec/xscreensaver/hextrail
+Comment=A network of colorful lines grows upon a hexagonal substrate. Written by Jamie Zawinski.

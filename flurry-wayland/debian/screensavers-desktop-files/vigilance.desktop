@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Vigilance
+Exec=/usr/libexec/xscreensaver/vigilance --root
+TryExec=/usr/libexec/xscreensaver/vigilance
+Comment=Security cameras keep careful track of their surroundings. You can trust them. Everything is completely under control. Written by Jamie Zawinski.

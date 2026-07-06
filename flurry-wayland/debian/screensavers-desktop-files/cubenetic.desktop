@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cubenetic
+Exec=/usr/libexec/xscreensaver/cubenetic --root
+TryExec=/usr/libexec/xscreensaver/cubenetic
+Comment=A cubist Lavalite, sort of. A pulsating set of overlapping boxes with ever-changing blobby patterns undulating across their surfaces. Written by Jamie Zawinski.

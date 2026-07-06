@@ -1,0 +1,21 @@
+usr/bin/xscreensaver
+usr/bin/xscreensaver-command
+usr/bin/xscreensaver-settings
+usr/bin/xscreensaver-demo
+usr/libexec/xscreensaver/xscreensaver-auth
+usr/libexec/xscreensaver/xscreensaver-gfx
+usr/libexec/xscreensaver/xscreensaver-gl-visual
+usr/share/applications/xscreensaver-settings.desktop
+usr/share/man/man1/xscreensaver.1
+usr/share/man/man1/xscreensaver-auth.1
+usr/share/man/man1/xscreensaver-gfx.1
+usr/share/man/man1/xscreensaver-gl-visual.1
+usr/share/man/man1/xscreensaver-command.1
+usr/share/man/man1/xscreensaver-settings.1
+usr/share/man/man1/xscreensaver-demo.1
+usr/share/pixmaps/xscreensaver.png
+usr/share/fonts/xscreensaver/*
+usr/share/xscreensaver/xscreensaver.service usr/lib/systemd/user
+debian/xscreensaver.svg /usr/share/pixmaps
+usr/share/applications/xscreensaver.desktop usr/share/xscreensaver
+debian/xscreensaver-wrapper.sh usr/share/xscreensaver

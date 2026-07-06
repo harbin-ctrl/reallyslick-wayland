@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=C Waves
+Exec=/usr/libexec/xscreensaver/cwaves --root
+TryExec=/usr/libexec/xscreensaver/cwaves
+Comment=A field of sinusoidal colors languidly scrolls. It's relaxing. Written by Jamie Zawinski.

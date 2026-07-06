@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Möbius Gears
+Exec=/usr/libexec/xscreensaver/moebiusgears --root
+TryExec=/usr/libexec/xscreensaver/moebiusgears
+Comment=An interlinked loop of rotating gears. The layout of the gears follows the path of a möbius strip. See also the "Pinion" and "Gears" screen savers. https://en.wikipedia.org/wiki/Involute_gear https://en.wikipedia.org/wiki/Moebius_strip Written by Jamie Zawinski.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Blaster
+Exec=/usr/libexec/xscreensaver/blaster --root
+TryExec=/usr/libexec/xscreensaver/blaster
+Comment=Flying space-combat robots (cleverly disguised as colored circles) do battle in front of a moving star field. Written by Jonathan Lin.

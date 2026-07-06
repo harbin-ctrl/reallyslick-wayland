@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=IFS
+Exec=/usr/libexec/xscreensaver/ifs --root
+TryExec=/usr/libexec/xscreensaver/ifs
+Comment=Clouds of iterated function systems spin and collide. Note that the "Detail" parameter is exponential. Number of points drawn is functions^detail. https://en.wikipedia.org/wiki/Iterated_function_system Written by Chris Le Sueur and Robby Griffin.

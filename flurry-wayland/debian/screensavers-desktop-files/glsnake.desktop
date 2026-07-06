@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL Snake
+Exec=/usr/libexec/xscreensaver/glsnake --root
+TryExec=/usr/libexec/xscreensaver/glsnake
+Comment=The "Rubik's Snake" puzzle. See also the "Rubik" and "Cube21" screen savers. https://en.wikipedia.org/wiki/Rubik%27s_Snake Written by Jamie Wilkinson, Andrew Bennetts, and Peter Aylett.

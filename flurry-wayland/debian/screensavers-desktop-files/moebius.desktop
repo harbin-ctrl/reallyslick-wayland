@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Möbius
+Exec=/usr/libexec/xscreensaver/moebius --root
+TryExec=/usr/libexec/xscreensaver/moebius
+Comment=M. C. Escher's "Möbius Strip II", an image of ants walking along the surface of a möbius strip. https://en.wikipedia.org/wiki/Moebius_strip https://en.wikipedia.org/wiki/Maurits_Cornelis_Escher Written by Marcelo F. Vianna.

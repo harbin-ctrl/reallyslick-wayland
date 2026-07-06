@@ -1,0 +1,24 @@
+Description: Change default newLoginCommand
+ This just sets a default. The desktop environment starting
+ xscreensaver should also tell it which command to use, see e.g.
+ https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=778470#25
+ We also offer the intermediate band-aid solution of
+ /usr/share/xscreensaver/xscreensaver-wrapper.sh
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/XScreenSaver.ad.in
+===================================================================
+--- xscreensaver-git.orig/driver/XScreenSaver.ad.in
++++ xscreensaver-git/driver/XScreenSaver.ad.in
+@@ -121,7 +121,9 @@
+ ! Or maybe yet another wheel-reinvention, "lxdm -c USER_SWITCH".
+ ! Oh wait, this wheel just keeps getting better: "dm-tool switch-to-greeter".
+ !
+-@NEW_LOGIN_COMMAND_P@*newLoginCommand:	@NEW_LOGIN_COMMAND@
++! @NEW_LOGIN_COMMAND_P@*newLoginCommand:	@NEW_LOGIN_COMMAND@
++! Debian: Hard-wire the command since the build cannot autodetect
++*newLoginCommand:	dm-tool switch-to-greeter
+ 
+ ! Mouse motions less than this many pixels per second are ignored.
+ ! This helps with cats, trucks and earthquakes.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Fiber Lamp
+Exec=/usr/libexec/xscreensaver/fiberlamp --root
+TryExec=/usr/libexec/xscreensaver/fiberlamp
+Comment=A fiber-optic lamp. Groovy. Written by Tim Auckland.

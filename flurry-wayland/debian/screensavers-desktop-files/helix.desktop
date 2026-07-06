@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Helix
+Exec=/usr/libexec/xscreensaver/helix --root
+TryExec=/usr/libexec/xscreensaver/helix
+Comment=Spirally string-art-ish patterns. Written by Jamie Zawinski.

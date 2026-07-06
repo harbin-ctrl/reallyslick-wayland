@@ -1,0 +1,29 @@
+Description: No-GL build for no-GL config file generation
+ Temporary hack until we get rid of the non-GL configuration.
+ This allows generating a non-GL application defaults file.
+ It does not affect the full GL build done afterwards.
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/configure
+===================================================================
+--- xscreensaver-git.orig/configure
++++ xscreensaver-git/configure
+@@ -18369,7 +18369,7 @@ elif test "$with_gl" = no; then
+   # It is the Twenty-First Century, and in This Modern World, every
+   # extant microcontroller is more performant than the desktop
+   # computers on which I developed most of the OpenGL hacks.
+-  exit 1
++  #exit 1 # yuck
+ 
+ elif test "$with_gl" != no; then
+   echo "error: must be yes or no: --with-gl=$with_gl"
+@@ -23039,7 +23039,7 @@ if test "$have_gl" = no ; then
+     CONF_STATUS=1
+   elif test "$with_gl_req" = no ; then
+     noteL 'The OpenGL 3D library is not being used.'
+-    CONF_STATUS=1
++    CONF_STATUS=0 # yuck
+   else
+     noteL 'The OpenGL 3D library was not found.'
+     CONF_STATUS=1

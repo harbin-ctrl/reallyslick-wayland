@@ -1,0 +1,31 @@
+Description: Don't build retired hacks
+ Forwarded upstream by e-mail 2009-06-16
+Forwarded: https://www.jwz.org/xscreensaver/bugs.html
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/hacks/Makefile.in
+===================================================================
+--- xscreensaver-git.orig/hacks/Makefile.in
++++ xscreensaver-git/hacks/Makefile.in
+@@ -274,7 +274,7 @@ MAKE2 = $(MAKE)
+ MAKE2CC = $(MAKE2) CC="$(CC)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
+ 
+ default: all
+-all: validate_xml $(EXES) $(RETIRED_EXES)
++all: validate_xml $(EXES)
+ 
+ install:   install-program   install-scripts install-xml install-man
+ uninstall: uninstall-program uninstall-xml uninstall-man
+Index: xscreensaver-git/hacks/glx/Makefile.in
+===================================================================
+--- xscreensaver-git.orig/hacks/glx/Makefile.in
++++ xscreensaver-git/hacks/glx/Makefile.in
+@@ -322,7 +322,7 @@ MAKE2 = $(MAKE)
+ MAKE2CC = $(MAKE2) CC="$(CC)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
+ 
+ default: all
+-all: validate_xml $(EXES) $(RETIRED_EXES)
++all: validate_xml $(EXES)
+ 
+ install:   install-program    install-scripts install-xml   install-man
+ uninstall: uninstall-program  uninstall-xml uninstall-man

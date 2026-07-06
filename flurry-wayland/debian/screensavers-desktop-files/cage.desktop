@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cage
+Exec=/usr/libexec/xscreensaver/cage --root
+TryExec=/usr/libexec/xscreensaver/cage
+Comment=Escher's "Impossible Cage". https://en.wikipedia.org/wiki/Maurits_Cornelis_Escher Written by Marcelo Vianna.

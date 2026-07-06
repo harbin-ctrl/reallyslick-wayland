@@ -1,0 +1,11 @@
+# setuid root required to disable OOM for security reasons (see bug #1007724)
+xscreensaver binary: elevated-privileges 4755 root/root [usr/libexec/xscreensaver/xscreensaver-auth]
+
+# this is the least of evils
+xscreensaver binary: killall-is-dangerous [prerm:7]
+
+# the font has actually MIT license
+xscreensaver: truetype-font-prohibits-installable-embedding (edit only) [usr/share/fonts/xscreensaver/clacon.ttf]
+
+# the font file is provided by upstream and is tested with their software
+xscreensaver: duplicate-font-file also in (fonts-ocr-a) [usr/share/fonts/xscreensaver/OCRA.ttf]

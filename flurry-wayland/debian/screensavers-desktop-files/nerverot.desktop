@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Nerve Rot
+Exec=/usr/libexec/xscreensaver/nerverot --root
+TryExec=/usr/libexec/xscreensaver/nerverot
+Comment=Nervously vibrating squiggles. Written by Dan Bornstein.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Engine
+Exec=/usr/libexec/xscreensaver/engine --root
+TryExec=/usr/libexec/xscreensaver/engine
+Comment=Internal combusion engines. https://en.wikipedia.org/wiki/Internal_combustion_engine#Operation Written by Ben Buxton, Ed Beroset and Jamie Zawinski.

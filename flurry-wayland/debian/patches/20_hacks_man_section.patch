@@ -1,0 +1,36 @@
+Description: Change man page section to 6x
+ We use section 6x (games!) for the hacks, but put them in the
+ man6 directory anyway.
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/hacks/Makefile.in
+===================================================================
+--- xscreensaver-git.orig/hacks/Makefile.in
++++ xscreensaver-git/hacks/Makefile.in
+@@ -18,8 +18,8 @@ datarootdir	= @datarootdir@
+ datadir		= @datadir@
+ mandir		= @mandir@
+ libexecdir	= @libexecdir@
+-mansuffix	= 6
+-manNdir		= $(mandir)/man$(mansuffix)
++mansuffix	= 6x
++manNdir		= $(mandir)/man6
+ 
+ HACKDIR		= @HACKDIR@
+ HACK_CONF_DIR	= @HACK_CONF_DIR@
+Index: xscreensaver-git/hacks/glx/Makefile.in
+===================================================================
+--- xscreensaver-git.orig/hacks/glx/Makefile.in
++++ xscreensaver-git/hacks/glx/Makefile.in
+@@ -18,8 +18,8 @@ datarootdir	= @datarootdir@
+ datadir		= @datadir@
+ mandir		= @mandir@
+ libexecdir	= @libexecdir@
+-mansuffix	= 6
+-manNdir		= $(mandir)/man$(mansuffix)
++mansuffix	= 6x
++manNdir		= $(mandir)/man6
+ 
+ HACKDIR		= @HACKDIR@
+ HACK_CONF_DIR	= @HACK_CONF_DIR@

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Danger Ball
+Exec=/usr/libexec/xscreensaver/dangerball --root
+TryExec=/usr/libexec/xscreensaver/dangerball
+Comment=A spiky ball. Ouch! Written by Jamie Zawinski.

@@ -1,0 +1,20 @@
+Description: Avoid segfault if xscreensaver-gl-visual is not installed
+Forwarded: not-needed
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1030659
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/demo-Gtk.c
+===================================================================
+--- xscreensaver-git.orig/driver/demo-Gtk.c
++++ xscreensaver-git/driver/demo-Gtk.c
+@@ -3291,7 +3291,9 @@ fix_preview_visual (state *s)
+   GdkWindow *gwindow = gtk_widget_get_window (GTK_WIDGET (win));
+   GdkScreen *gscreen = gdk_window_get_screen (gwindow);
+   GdkVisual *gvisual1 = gdk_screen_get_system_visual (gscreen);
+-  GdkVisual *gvisual2 = x_visual_to_gdk_visual (gwindow, xvisual);
++  GdkVisual *gvisual2 = (xvisual
++                         ? x_visual_to_gdk_visual (gwindow, xvisual)
++                         : 0);
+ 
+   if (! gvisual2)
+     {

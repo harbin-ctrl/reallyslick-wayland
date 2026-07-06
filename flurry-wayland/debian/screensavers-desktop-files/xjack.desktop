@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=XJack
+Exec=/usr/libexec/xscreensaver/xjack --root
+TryExec=/usr/libexec/xscreensaver/xjack
+Comment=A novel by Jack Torrance. Written by Jamie Zawinski.

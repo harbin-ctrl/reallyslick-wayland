@@ -1,0 +1,18 @@
+Description: Disable hacks that reveal the desktop
+Forwarded: not-needed
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=679974
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/driver/XScreenSaver.ad.in
+===================================================================
+--- xscreensaver-git.orig/driver/XScreenSaver.ad.in
++++ xscreensaver-git/driver/XScreenSaver.ad.in
+@@ -38,7 +38,7 @@
+ *dpmsStandby:		2:00:00
+ *dpmsSuspend:		2:00:00
+ *dpmsOff:		4:00:00
+-*grabDesktopImages:	True
++*grabDesktopImages:	False
+ *grabVideoFrames:	False
+ *chooseRandomImages:	@DEFAULT_IMAGES_P@
+ ! This can be a local directory name, or the URL of an RSS or Atom feed.

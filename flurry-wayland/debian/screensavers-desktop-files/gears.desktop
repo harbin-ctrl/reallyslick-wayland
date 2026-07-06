@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Gears
+Exec=/usr/libexec/xscreensaver/gears --root
+TryExec=/usr/libexec/xscreensaver/gears
+Comment=Interlocking gears. See also the "Pinion" and "Möbius Gears" screen savers. https://en.wikipedia.org/wiki/Involute_gear https://en.wikipedia.org/wiki/Epicyclic_gearing Written by Jamie Zawinski.

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Decay Screen
+Exec=/usr/libexec/xscreensaver/decayscreen --root
+TryExec=/usr/libexec/xscreensaver/decayscreen
+Comment=Melts an image in various ways. Warning, if the effect continues after the screen saver is off, seek medical attention. Written by David Wald, Vivek Khera, Jamie Zawinski, and Vince Levey.

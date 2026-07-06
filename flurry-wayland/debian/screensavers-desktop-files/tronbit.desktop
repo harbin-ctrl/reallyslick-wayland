@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Tron Bit
+Exec=/usr/libexec/xscreensaver/tronbit --root
+TryExec=/usr/libexec/xscreensaver/tronbit
+Comment=The character "Bit" from the film, "Tron". The "yes" state is a tetrahedron; the "no" state is the second stellation of an icosahedron; and the idle state oscillates between a small triambic icosahedron and the compound of an icosahedron and a dodecahedron. https://en.wikipedia.org/wiki/List_of_Tron_characters#Bit https://en.wikipedia.org/wiki/Uniform_polyhedra https://en.wikipedia.org/wiki/Stellation Written by Jamie Zawinski.

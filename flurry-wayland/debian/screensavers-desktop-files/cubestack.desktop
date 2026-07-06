@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Cube Stack
+Exec=/usr/libexec/xscreensaver/cubestack --root
+TryExec=/usr/libexec/xscreensaver/cubestack
+Comment=An endless stack of unfolding, translucent cubes. Written by Jamie Zawinski.

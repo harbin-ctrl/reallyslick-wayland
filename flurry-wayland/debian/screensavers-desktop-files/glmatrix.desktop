@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL Matrix
+Exec=/usr/libexec/xscreensaver/glmatrix --root
+TryExec=/usr/libexec/xscreensaver/glmatrix
+Comment=The 3D "digital rain" effect, as seen in the title sequence of "The Matrix". See also "xmatrix" for a 2D rendering of the similar effect that appeared on the computer monitors actually *in* the movie. https://en.wikipedia.org/wiki/Matrix_digital_rain Written by Jamie Zawinski.

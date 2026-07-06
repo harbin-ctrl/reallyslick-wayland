@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Halo
+Exec=/usr/libexec/xscreensaver/halo --root
+TryExec=/usr/libexec/xscreensaver/halo
+Comment=Circular interference patterns. https://en.wikipedia.org/wiki/Moire_pattern Written by Jamie Zawinski.

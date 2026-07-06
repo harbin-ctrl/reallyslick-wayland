@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=GL Cells
+Exec=/usr/libexec/xscreensaver/glcells --root
+TryExec=/usr/libexec/xscreensaver/glcells
+Comment=Cells growing, dividing and dying on your screen. Microscopic pathos. Written by Matthias Toussaint.

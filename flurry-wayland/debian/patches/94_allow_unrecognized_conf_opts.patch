@@ -1,0 +1,21 @@
+Description: Allow unrecognized configure options
+ Fix an oddity in upstream-generated configure.
+ Our dh_auto_configure will add several unrecognized options.
+Forwarded: not-needed
+Author: Tormod Volden <debian.tormod@gmail.com>
+
+Index: xscreensaver-git/configure
+===================================================================
+--- xscreensaver-git.orig/configure
++++ xscreensaver-git/configure
+@@ -2856,8 +2856,8 @@ echo "current directory: `pwd`"
+ echo "command line was: $0 $@"
+ 
+ if ! test -z "$ac_unrecognized_opts" ; then
+-  echo "" >&2
+-  exit 2
++  echo "ignored options $ac_unrecognized_opts" >&2
++  #exit 2
+ fi
+ 
+ ###############################################################################

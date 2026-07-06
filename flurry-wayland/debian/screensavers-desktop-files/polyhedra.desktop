@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Polyhedra
+Exec=/usr/libexec/xscreensaver/polyhedra --root
+TryExec=/usr/libexec/xscreensaver/polyhedra
+Comment=The 75 uniform polyhedra and their duals, plus 5 prisms and antiprisms, and some information about each. https://en.wikipedia.org/wiki/Uniform_polyhedra https://en.wikipedia.org/wiki/Stellation https://en.wikipedia.org/wiki/Dual_polyhedron https://en.wikipedia.org/wiki/Antiprism Written by Dr. Zvi Har'El and Jamie Zawinski.

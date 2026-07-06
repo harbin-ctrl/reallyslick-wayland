@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Pong
+Exec=/usr/libexec/xscreensaver/pong --root
+TryExec=/usr/libexec/xscreensaver/pong
+Comment=The 1971 Pong home video game, including artifacts of an old color TV set. In clock mode, the score keeps track of the current time. https://en.wikipedia.org/wiki/Pong Written by Jeremy English, Trevor Blackwell and Jamie Zawinski.

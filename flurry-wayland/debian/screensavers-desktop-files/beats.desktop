@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Beats
+Exec=/usr/libexec/xscreensaver/beats --root
+TryExec=/usr/libexec/xscreensaver/beats
+Comment=Draws figures that move around at a slightly different rate from each other, creating interesting chaotic and ordered patterns. Written by David Eccles.

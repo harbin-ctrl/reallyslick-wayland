@@ -1,0 +1,8 @@
+usr/libexec/xscreensaver/xscreensaver-getimage
+usr/libexec/xscreensaver/xscreensaver-getimage-file
+usr/libexec/xscreensaver/xscreensaver-getimage-video
+usr/libexec/xscreensaver/xscreensaver-text
+usr/share/man/man1/xscreensaver-getimage-file.1
+usr/share/man/man1/xscreensaver-getimage-video.1
+usr/share/man/man1/xscreensaver-getimage.1
+usr/share/man/man1/xscreensaver-text.1

@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Rocks
+Exec=/usr/libexec/xscreensaver/rocks --root
+TryExec=/usr/libexec/xscreensaver/rocks
+Comment=An asteroid field zooms by. Written by Jamie Zawinski.

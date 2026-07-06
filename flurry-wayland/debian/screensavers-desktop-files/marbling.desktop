@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Marbling
+Exec=/usr/libexec/xscreensaver/marbling --root
+TryExec=/usr/libexec/xscreensaver/marbling
+Comment=Marble-like or cloud-like patterns generated using Perlin Noise and Fractal Brownian Motion. https://en.wikipedia.org/wiki/Perlin_noise https://en.wikipedia.org/wiki/Fractional_Brownian_motion Written by Jamie Zawinski and Dave Odell.

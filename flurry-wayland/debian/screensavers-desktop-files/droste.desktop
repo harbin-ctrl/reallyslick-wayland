@@ -1,0 +1,6 @@
+
+[Desktop Entry]
+Name=Droste
+Exec=/usr/libexec/xscreensaver/droste --root
+TryExec=/usr/libexec/xscreensaver/droste
+Comment=Mise en abyme: infinite spiral recursion within images. https://en.wikipedia.org/wiki/Droste_effect https://en.wikipedia.org/wiki/Maurits_Cornelis_Escher Written by Jamie Zawinski.
