@@ -41,51 +41,21 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static const char sccsid[] = "@(#)flurry.c	4.07 97/11/24 xlockmore";
 #endif
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+
+#include "flurry.h"
+
 #define DEF_PRESET     "random"
 #define DEF_BRIGHTNESS "8"
 
-# define DEFAULTS		"*delay:      10000 \n" \
-						"*showFPS:    False \n"
-
-# define release_flurry 0
-# include "xlockmore.h"		/* from the xscreensaver distribution */
-
-#ifdef USE_GL
-
-static char *preset_str;
-
-static XrmOptionDescRec opts[] = {
-    { "-preset",     ".preset",     XrmoptionSepArg, 0 }
-};
-
-static argtype vars[] = {
-    {&preset_str, "preset",     "Preset",     DEF_PRESET,     t_String},
-};
-
-#define countof(x) (sizeof((x))/sizeof((*x)))
-
-ENTRYPOINT ModeSpecOpt flurry_opts = {countof(opts), opts, countof(vars), vars, NULL};
-
-#ifdef USE_MODULES
-ModStruct   flurry_description = {
-    "flurry",
-    "init_flurry",
-    "draw_flurry",
-    NULL,
-    "draw_flurry",
-    "init_flurry",
-    "free_flurry",
-    &flurry_opts,
-    1000, 1, 2, 1, 4, 1.0,
-    "",
-    "Flurry",
-    0,
-    NULL
-};
-
-#endif
-
-#include "flurry.h"
+extern char *preset_str;
+extern char *progname;
 
 global_info_t *flurry_info = NULL;
 
@@ -315,9 +285,6 @@ ENTRYPOINT void reshape_flurry(ModeInfo *mi, int width, int height)
 {
     global_info_t *global = flurry_info + MI_SCREEN(mi);
 
-    global->window = MI_WINDOW(mi);
-    glXMakeCurrent(MI_DISPLAY(mi), global->window, *global->glx_context);
-
     glViewport(0.0, 0.0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -466,24 +433,19 @@ init_flurry(ModeInfo * mi)
     int screen = MI_SCREEN(mi);
     global_info_t *global;
 
-    MI_INIT (mi, flurry_info);
-
+    if (!flurry_info) {
+        flurry_info = calloc(1, sizeof(global_info_t));
+    }
     global = &flurry_info[screen];
 
     global->gTimeCounter = currentTime();
-
-    global->window = MI_WINDOW(mi);
 
     global->flurry = NULL;
 
     init_flurry_streams(global);
 
-    if ((global->glx_context = init_GL(mi)) != NULL) {
-	reshape_flurry(mi, MI_WIDTH(mi), MI_HEIGHT(mi));
-	GLSetupRC(global);
-    } else {
-	MI_CLEARWINDOW(mi);
-    }
+    reshape_flurry(mi, MI_WIDTH(mi), MI_HEIGHT(mi));
+    GLSetupRC(global);
 
     global->first = 1;
     global->oldFrameTime = -1;
@@ -499,27 +461,15 @@ draw_flurry(ModeInfo * mi)
 
     global_info_t *global = flurry_info + MI_SCREEN(mi);
     flurry_info_t *flurry;
-    Display    *display = MI_DISPLAY(mi);
-    Window      window = MI_WINDOW(mi);
 
     newFrameTime = currentTime();
     if (global->oldFrameTime == -1) {
 	/* special case the first frame -- clear to black */
 	alpha = 1.0;
     } else {
-	/* 
-	 * this clamps the speed at below 60fps and, here
-	 * at least, produces a reasonably accurate 50fps.
-	 * (probably part CPU speed and part scheduler).
-	 *
-	 * Flurry is designed to run at this speed; much higher
-	 * than that and the blending causes the display to
-	 * saturate, which looks really ugly.
-	 */
 	if (newFrameTime - global->oldFrameTime < 1/60.0) {
 	    usleep(MAX_(1,(int)(20000 * (newFrameTime - global->oldFrameTime))));
 	    return;
-
 	}
 	deltaFrameTime = newFrameTime - global->oldFrameTime;
 	alpha = 5.0 * deltaFrameTime;
@@ -528,15 +478,11 @@ draw_flurry(ModeInfo * mi)
 
     if (alpha > 0.2) alpha = 0.2;
 
-    if (!global->glx_context)
-	return;
-
     if (global->first) {
 	global->texid = MakeTexture();
 	global->first = 0;
     }
     glDrawBuffer(GL_BACK);
-    glXMakeCurrent(display, window, *global->glx_context);
 
     glViewport(0, 0, (GLint)global->sys_glWidth, (GLint)global->sys_glHeight);
     glMatrixMode(GL_PROJECTION);
@@ -556,42 +502,7 @@ draw_flurry(ModeInfo * mi)
 	GLRenderScene(global, flurry, brite * flurry->briteFactor);
     }
 
-    if (mi->fps_p) do_fps (mi);
-
     glFinish();
-    glXSwapBuffers(display, window);
-}
-
-ENTRYPOINT Bool
-flurry_handle_event(ModeInfo *mi, XEvent *event)
-{
-    if (event->xany.type == KeyPress) {
-        KeySym keysym;
-        char c = 0;
-        XLookupString (&event->xkey, &c, 1, &keysym, 0);
-        if (c == 'f' || c == 'F') {
-            Display *dpy = MI_DISPLAY(mi);
-            Window win = MI_WINDOW(mi);
-            Atom wm_state = XInternAtom(dpy, "_NET_WM_STATE", False);
-            Atom fullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
-
-            XEvent xev;
-            memset(&xev, 0, sizeof(xev));
-            xev.type = ClientMessage;
-            xev.xclient.window = win;
-            xev.xclient.message_type = wm_state;
-            xev.xclient.format = 32;
-            xev.xclient.data.l[0] = 2; /* _NET_WM_STATE_TOGGLE */
-            xev.xclient.data.l[1] = (long)fullscreen;
-            xev.xclient.data.l[2] = 0;
-            xev.xclient.data.l[3] = 1;
-
-            XSendEvent(dpy, DefaultRootWindow(dpy), False,
-                       SubstructureRedirectMask | SubstructureNotifyMask, &xev);
-            return True;
-        }
-    }
-    return False;
 }
 
 ENTRYPOINT void
@@ -600,14 +511,12 @@ free_flurry(ModeInfo * mi)
     global_info_t *global = &flurry_info[MI_SCREEN(mi)];
     flurry_info_t *flurry;
 
-	if (!global->glx_context) return;
-    glXMakeCurrent(MI_DISPLAY(mi), global->window, *global->glx_context);
-
-    for (flurry = global->flurry; flurry; flurry=flurry->next)
-		delete_flurry_info(flurry);
-	if (global->texid) glDeleteTextures (1, &global->texid);
+    for (flurry = global->flurry; flurry; ) {
+        flurry_info_t *next = flurry->next;
+        delete_flurry_info(flurry);
+        free(flurry);
+        flurry = next;
+    }
+    global->flurry = NULL;
+    if (global->texid) glDeleteTextures(1, &global->texid);
 }
-
-XSCREENSAVER_MODULE ("Flurry", flurry)
-
-#endif

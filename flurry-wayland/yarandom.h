@@ -56,29 +56,7 @@ extern void ya_rand_init (unsigned int);
 
 /*#define srandom(i) ya_rand_init(0)*/
 
-/* Define these away to keep people from using the wrong APIs in xscreensaver.
- */
-#define rand          __ERROR_use_random_not_rand_in_xscreensaver__
-#define drand48       __ERROR_use_frand_not_drand48_in_xscreensaver__
-#define srandom       __ERROR_do_not_call_srandom_in_xscreensaver__
-#define srand         __ERROR_do_not_call_srand_in_xscreensaver__
-#define sranddev      __ERROR_do_not_call_sranddev_in_xscreensaver__
-#define ya_rand_init  __ERROR_do_not_call_ya_rand_init_in_xscreensaver__
-#define srandomdev    __ERROR_do_not_call_srandomdev_in_xscreensaver__
-#define arc4random    __ERROR_do_not_call_arc4random_in_xscreensaver__
-#define arc4random_addrandom __ERROR_do_not_call_arc4random_in_xscreensaver__
-#define arc4random_buf       __ERROR_do_not_call_arc4random_in_xscreensaver__
-#define arc4random_stir      __ERROR_do_not_call_arc4random_in_xscreensaver__
-#define arc4random_uniform   __ERROR_do_not_call_arc4random_in_xscreensaver__
-#define erand48    __ERROR_do_not_call_erand48_in_xscreensaver__
-#define jrand48    __ERROR_do_not_call_jrand48_in_xscreensaver__
-#define lcong48    __ERROR_do_not_call_lcong48_in_xscreensaver__
-#define lrand48    __ERROR_do_not_call_lrand48_in_xscreensaver__
-#define mrand48    __ERROR_do_not_call_mrand48_in_xscreensaver__
-#define nrand48    __ERROR_do_not_call_nrand48_in_xscreensaver__
-#define seed48     __ERROR_do_not_call_seed48_in_xscreensaver__
-#define srand48    __ERROR_do_not_call_srand48_in_xscreensaver__
-#define rand_r     __ERROR_do_not_call_rand_r_in_xscreensaver__
+/* API safety macros removed for standalone compilation */
 
 
 #if defined (__GNUC__) && (__GNUC__ >= 2)

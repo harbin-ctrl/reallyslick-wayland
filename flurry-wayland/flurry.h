@@ -35,13 +35,29 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __GLCODE__
 #define __GLCODE__
 
-#include "xlockmoreI.h"
-#include "yarandom.h"
-#include "rotator.h"
-#include "gltrackball.h"
-
 #include <stdlib.h>
 #include <math.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+
+#include "yarandom.h"
+
+#ifndef Bool
+typedef int Bool;
+#define True 1
+#define False 0
+#endif
+
+typedef struct {
+    int width;
+    int height;
+    int screen;
+} ModeInfo;
+
+#define MI_SCREEN(mi) ((mi)->screen)
+#define MI_WIDTH(mi)  ((mi)->width)
+#define MI_HEIGHT(mi) ((mi)->height)
+#define ENTRYPOINT
 
 typedef struct _global_info_t global_info_t;
 typedef struct _flurry_info_t flurry_info_t;
@@ -264,8 +280,6 @@ struct _flurry_info_t {
 
 struct _global_info_t {
   /* system values */
-	GLXContext *glx_context;
-	Window window;
         int optMode;
 
 	float sys_glWidth;
@@ -282,5 +296,10 @@ struct _global_info_t {
 #define kNumSpectrumEntries 512
 
 double TimeInSecondsSinceStart(const global_info_t *global);
+
+void init_flurry(ModeInfo * mi);
+void draw_flurry(ModeInfo * mi);
+void reshape_flurry(ModeInfo *mi, int width, int height);
+void free_flurry(ModeInfo * mi);
 
 #endif /* Include/Define */
