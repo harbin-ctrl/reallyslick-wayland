@@ -245,6 +245,7 @@ void GLRenderScene(global_info_t *global, flurry_info_t *flurry, double b)
     /* glDisable(GL_BLEND); */
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA,GL_ONE);
+    glBindTexture(GL_TEXTURE_2D, global->texid);
     glEnable(GL_TEXTURE_2D);
 
     switch(global->optMode) {
@@ -501,6 +502,8 @@ draw_flurry(ModeInfo * mi)
     for (flurry = global->flurry; flurry; flurry=flurry->next) {
 	GLRenderScene(global, flurry, brite * flurry->briteFactor);
     }
+
+
 
     glFinish();
 }

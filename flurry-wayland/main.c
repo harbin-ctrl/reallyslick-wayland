@@ -67,6 +67,7 @@ int window_height = 600;
 bool size_changed = false;
 bool is_fullscreen = false;
 bool running = true;
+bool skip_copy = false;
 
 // Preset config
 char *preset_str = "random";
@@ -102,6 +103,8 @@ static void toggle_fullscreen(void) {
         xdg_toplevel_set_fullscreen(xdg_toplevel, NULL);
         is_fullscreen = true;
     }
+    wl_surface_commit(surface);
+    wl_display_flush(display);
 }
 
 // Keyboard listener
@@ -207,6 +210,8 @@ static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface, u
 
 static void xdg_toplevel_configure(void *data, struct xdg_toplevel *xdg_toplevel,
                                    int32_t width, int32_t height, struct wl_array *states) {
+    printf("xdg_toplevel_configure: %d x %d\n", width, height);
+    fflush(stdout);
     if (width > 0 && height > 0) {
         if (window_width != width || window_height != height) {
             window_width = width;
@@ -223,39 +228,32 @@ static void xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel) {
 static void toplevel_decoration_configure(void *data, struct zxdg_toplevel_decoration_v1 *decoration, uint32_t mode) {
 }
 
-GLuint fbo = 0;
-GLuint fbo_texture = 0;
+GLuint trail_texture = 0;
 
-static void init_fbo(int width, int height) {
-    if (fbo) {
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteTextures(1, &fbo_texture);
-        fbo = 0;
-        fbo_texture = 0;
+static void init_trail_texture(int width, int height) {
+    if (trail_texture) {
+        glDeleteTextures(1, &trail_texture);
+        trail_texture = 0;
     }
     
-    glGenTextures(1, &fbo_texture);
-    glBindTexture(GL_TEXTURE_2D, fbo_texture);
+    glGenTextures(1, &trail_texture);
+    glBindTexture(GL_TEXTURE_2D, trail_texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_texture, 0);
-
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        fprintf(stderr, "FBO initialization failed: 0x%x\n", status);
-    }
-    
-    // Clear FBO initially to black
+    // Clear texture by clearing screen and copying it initially
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        printf("init_trail_texture: glCopyTexSubImage2D failed with error 0x%x\n", err);
+        fflush(stdout);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -324,6 +322,10 @@ int main(int argc, char **argv) {
     xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
     xdg_toplevel_set_title(xdg_toplevel, "Flurry (Wayland)");
 
+    if (is_fullscreen) {
+        xdg_toplevel_set_fullscreen(xdg_toplevel, NULL);
+    }
+
     if (decoration_manager) {
         toplevel_decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(decoration_manager, xdg_toplevel);
         zxdg_toplevel_decoration_v1_add_listener(toplevel_decoration, &toplevel_decoration_listener, NULL);
@@ -354,63 +356,100 @@ int main(int argc, char **argv) {
         .screen = 0
     };
 
-    init_fbo(window_width, window_height);
+    init_trail_texture(window_width, window_height);
     init_flurry(&mi);
-
-
 
     while (running) {
         wl_display_dispatch_pending(display);
 
         if (size_changed) {
             wl_egl_window_resize(egl_window, window_width, window_height, 0, 0);
+            eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
             mi.width = window_width;
             mi.height = window_height;
             reshape_flurry(&mi, window_width, window_height);
-            init_fbo(window_width, window_height);
+            init_trail_texture(window_width, window_height);
+            skip_copy = true;
             size_changed = false;
         }
 
         if (preset_changed) {
             reshape_flurry(&mi, window_width, window_height);
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            init_trail_texture(window_width, window_height);
             preset_changed = false;
         }
 
-        // Render flurry into FBO
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        draw_flurry(&mi);
 
 
+        // 1. Draw the previous frame's trails from texture onto the back buffer
+        glViewport(0, 0, window_width, window_height);
+        
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0, 1, 0, 1, -1, 1);
+        
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
 
-        // Blit FBO to screen
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glBlitFramebuffer(0, 0, window_width, window_height,
-                          0, 0, window_width, window_height,
-                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glDisableClientState(GL_VERTEX_ARRAY);
+        glDisableClientState(GL_COLOR_ARRAY);
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDrawBuffer(GL_BACK);
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, trail_texture);
+        glDisable(GL_BLEND);
 
-        // Dummy draw to trigger EGL dirty tracking
-        glBegin(GL_POINTS);
-        glVertex2f(0.0f, 0.0f);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 0.0f);
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(1.0f, 0.0f);
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(1.0f, 1.0f);
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 1.0f);
         glEnd();
 
-        eglSwapBuffers(egl_display, egl_surface);
+        glDisable(GL_TEXTURE_2D);
+
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
+
+        // 2. Render flurry on top (adds new particles and overlays the fade)
+        draw_flurry(&mi);
+
+        // 3. Copy the finished frame from back buffer back to the trail texture
+        if (!skip_copy) {
+            glBindTexture(GL_TEXTURE_2D, trail_texture);
+            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, window_width, window_height);
+        } else {
+            skip_copy = false;
+        }
 
 
+
+        // 4. Swap EGL buffers
+        if (!eglSwapBuffers(egl_display, egl_surface)) {
+            printf("eglSwapBuffers failed: 0x%x\n", eglGetError());
+            fflush(stdout);
+        }
+
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            printf("OpenGL Error: 0x%x\n", err);
+            fflush(stdout);
+        }
     }
 
     free_flurry(&mi);
 
-    if (fbo) {
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteTextures(1, &fbo_texture);
+    if (trail_texture) {
+        glDeleteTextures(1, &trail_texture);
     }
 
     eglDestroySurface(egl_display, egl_surface);
