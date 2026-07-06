@@ -332,10 +332,10 @@ void CBuilding::ConstructRoof (float left, float right, float front, float back,
     vector_buffer[3] = glVector (right, bottom, back);
     d->CreateLightTrim (vector_buffer, 4, (float)RandomVal (2) + 1.0f, _seed, _trim_color);
   } else if (addon == ADDON_LIGHTS && !_have_lights) {
-    new CLight (glVector (left, (float)(bottom + 2), front), _trim_color, 2);
-    new CLight (glVector (right, (float)(bottom + 2), front), _trim_color, 2);
-    new CLight (glVector (right, (float)(bottom + 2), back), _trim_color, 2);
-    new CLight (glVector (left, (float)(bottom + 2), back), _trim_color, 2);
+    new CLight (glVector (left - 0.125f, (float)(bottom + 2), front - 0.125f), _trim_color, 2);
+    new CLight (glVector (right + 0.125f, (float)(bottom + 2), front - 0.125f), _trim_color, 2);
+    new CLight (glVector (right + 0.125f, (float)(bottom + 2), back + 0.125f), _trim_color, 2);
+    new CLight (glVector (left - 0.125f, (float)(bottom + 2), back + 0.125f), _trim_color, 2);
     _have_lights = true;
   }
   bottom += (float)height;
