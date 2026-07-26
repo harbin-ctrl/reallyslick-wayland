@@ -1,2 +1,5 @@
 substrate
 *.o
+test_gl
+strace.out
+*.o
