@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Raytrace lattice-wayland icon.
 Two interlocking brass tori, 3/4 view, RGBA with transparent background.
@@ -139,9 +140,12 @@ final_a   = (glow_arr[..., 3] * 255).astype(np.uint8)
 img = Image.fromarray(np.dstack([final_rgb, final_a]), 'RGBA')
 
 # ── Save at multiple sizes ────────────────────────────────────────────────────
-img.save('$HOME/lattice/lattice-icon-512.png')
+# Write beside this script unless told otherwise
+OUT = os.environ.get('ICON_OUT', os.path.dirname(os.path.abspath(__file__)))
+
+img.save(os.path.join(OUT, 'lattice-icon-512.png'))
 print("Saved lattice-icon-512.png")
 
 for sz in (256, 128, 64, 48, 32, 16):
-    img.resize((sz, sz), Image.LANCZOS).save(f'$HOME/lattice/lattice-icon-{sz}.png')
+    img.resize((sz, sz), Image.LANCZOS).save(os.path.join(OUT, f'lattice-icon-{sz}.png'))
     print(f"Saved lattice-icon-{sz}.png")
