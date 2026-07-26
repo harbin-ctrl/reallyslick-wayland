@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import math
 import random
 from PIL import Image, ImageDraw
@@ -133,9 +134,12 @@ for cycle in range(2500):
         else:
             start_crack(cr)
 
-img.save('$HOME/substrate/substrate-icon-512.png')
+# Write beside this script unless told otherwise
+OUT = os.environ.get('ICON_OUT', os.path.dirname(os.path.abspath(__file__)))
+
+img.save(os.path.join(OUT, 'substrate-icon-512.png'))
 print("Saved substrate-icon-512.png")
 
 for sz in (256, 128, 64, 48, 32, 16):
-    img.resize((sz, sz), Image.Resampling.LANCZOS).save(f'$HOME/substrate/substrate-icon-{sz}.png')
+    img.resize((sz, sz), Image.Resampling.LANCZOS).save(os.path.join(OUT, f'substrate-icon-{sz}.png'))
     print(f"Saved substrate-icon-{sz}.png")
