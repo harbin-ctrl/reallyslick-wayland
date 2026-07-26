@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Skyrocket
+Comment=Really Slick Skyrocket Screensaver ported to Wayland
+Exec=skyrocket
+Icon=skyrocket
+Terminal=false
+Type=Application
+Categories=DesktopToy;

@@ -1,0 +1,8 @@
+skyrocket
+stringify
+*.o
+**/*.o
+xdg-shell-client-protocol.h
+xdg-shell-protocol.c
+xdg-decoration-client-protocol.h
+xdg-decoration-protocol.c
