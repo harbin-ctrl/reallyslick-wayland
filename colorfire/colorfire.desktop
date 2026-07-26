@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Colorfire
+GenericName=Colorfire Screensaver
+Comment=Fire-like organic color patterns (Really Slick Screensavers port)
+Exec=colorfire
+Icon=colorfire
+Terminal=false
+Categories=DesktopToy;
+Keywords=screensaver;opengl;wayland;3d;fire;
