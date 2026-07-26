@@ -1,0 +1,36 @@
+#ifndef GL_EXT_H
+#define GL_EXT_H
+
+#include <GL/gl.h>
+#include <GL/glext.h>
+
+extern PFNGLGENFRAMEBUFFERSEXTPROC glGenFramebuffersEXT;
+extern PFNGLBINDFRAMEBUFFEREXTPROC glBindFramebufferEXT;
+extern PFNGLFRAMEBUFFERTEXTURE2DEXTPROC glFramebufferTexture2DEXT;
+extern PFNGLCHECKFRAMEBUFFERSTATUSEXTPROC glCheckFramebufferStatusEXT;
+extern PFNGLDELETETEXTURESEXTPROC glDeleteTexturesEXT;
+
+extern PFNGLGENRENDERBUFFERSEXTPROC glGenRenderbuffersEXT;
+extern PFNGLBINDRENDERBUFFEREXTPROC glBindRenderbufferEXT;
+extern PFNGLRENDERBUFFERSTORAGEEXTPROC glRenderbufferStorageEXT;
+extern PFNGLFRAMEBUFFERRENDERBUFFEREXTPROC glFramebufferRenderbufferEXT;
+
+extern PFNGLCREATESHADERPROC glCreateShader;
+extern PFNGLSHADERSOURCEPROC glShaderSource;
+extern PFNGLCOMPILESHADERPROC glCompileShader;
+extern PFNGLGETSHADERIVPROC glGetShaderiv;
+extern PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
+extern PFNGLCREATEPROGRAMPROC glCreateProgram;
+extern PFNGLATTACHSHADERPROC glAttachShader;
+extern PFNGLLINKPROGRAMPROC glLinkProgram;
+extern PFNGLGETPROGRAMIVPROC glGetProgramiv;
+extern PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
+extern PFNGLUSEPROGRAMPROC glUseProgram;
+extern PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
+extern PFNGLUNIFORM1IPROC glUniform1i;
+extern PFNGLUNIFORM1FPROC glUniform1f;
+extern PFNGLUNIFORM2FPROC glUniform2f;
+
+void LoadGLExtensions();
+
+#endif
