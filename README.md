@@ -1,4 +1,4 @@
-# Wayland Screensavers
+# Wayland Slick Toys
 
 Eight screensavers from [Really Slick Screensavers](https://github.com/sirspudd/rss-glx), ported to run
 natively on Wayland as desktop toys rather than screensavers. Written for a Raspberry Pi 400, but nothing in
