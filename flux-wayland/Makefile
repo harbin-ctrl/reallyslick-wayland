@@ -40,22 +40,24 @@ xdg-decoration-client-protocol.h: $(XDG_DECO_XML)
 xdg-decoration-protocol.c: $(XDG_DECO_XML)
 	wayland-scanner private-code < $< > $@
 
+# This target used to install lattice.desktop and lattice-icon-*.png, copied
+# wholesale from lattice-wayland: installing flux put a menu entry named
+# "Lattice" on the system, and on a machine that had never built lattice the
+# install simply failed on the missing files. flux ships its own flux.desktop
+# now.
+#
+# There is no icon loop because flux has no icons yet -- unlike its siblings,
+# nobody has drawn them. flux.desktop still says Icon=flux, so the entry picks
+# them up by name the day they land here; until then the desktop falls back to
+# a generic icon. Installing another screensaver's artwork is not a stand-in.
 install: $(TARGET)
-	install -Dm755 $(TARGET)        $(DESTDIR)$(BINDIR)/$(TARGET)
-	install -Dm644 lattice.desktop  $(DESTDIR)$(APPDIR)/lattice.desktop
-	for sz in 16 32 48 64 128 256 512; do \
-		install -Dm644 lattice-icon-$${sz}.png \
-			$(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
-	done
-	-gtk-update-icon-cache -f -t $(DESTDIR)$(ICONDIR) 2>/dev/null || true
+	install -Dm755 $(TARGET)     $(DESTDIR)$(BINDIR)/$(TARGET)
+	install -Dm644 flux.desktop  $(DESTDIR)$(APPDIR)/flux.desktop
 	-update-desktop-database $(DESTDIR)$(APPDIR) 2>/dev/null || true
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
-	rm -f $(DESTDIR)$(APPDIR)/lattice.desktop
-	for sz in 16 32 48 64 128 256 512; do \
-		rm -f $(DESTDIR)$(ICONDIR)/$${sz}x$${sz}/apps/lattice.png; \
-	done
+	rm -f $(DESTDIR)$(APPDIR)/flux.desktop
 
 install-user: $(TARGET)
 	$(MAKE) install PREFIX=$(HOME)/.local

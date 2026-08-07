@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Flux
+GenericName=Flux Screensaver
+Comment=Trails of particles swept along a chaotic strange attractor (Really Slick Screensavers port)
+Exec=flux
+Icon=flux
+Terminal=false
+Categories=DesktopToy;
+Keywords=screensaver;opengl;wayland;3d;particles;
